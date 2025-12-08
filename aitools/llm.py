@@ -124,7 +124,7 @@ class LLMHelper:
                             { "type": "input_text", "text": "Break it into items/paragraphs." },
                             {
                                 "type": "input_file",
-                                "filename": "pril-9-regl.pdf",
+                                "filename": "legal_document.pdf",
                                 "file_data": f"data:application/pdf;base64,{document_base64}",
                             }
                         ],

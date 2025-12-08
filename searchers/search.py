@@ -76,7 +76,50 @@ class ProLawRAGSearch:
                 print("LLM Ответ:")
                 print(llm_response)
 
-    
+    async def get_response_text(
+        self,
+        query: str,
+        type: str = 'base',
+        lang: str = 'ru'
+    ) -> str:
+        """
+        Get response as text string (for bot integration).
+
+        Parameters:
+            query (str): User's question.
+            type (str): Response type ('base' or 'pro').
+            lang (str): Language code ('ru' or 'kg').
+
+        Returns:
+            str: LLM response text.
+        """
+        if type == 'base':
+            user_input = query
+            query_vectors = self.embedder.encode_queries([user_input])
+            results = self.milvus_db.search_similar_laws(
+                query_vectors, top_k=self.top_k, lang=lang
+            )
+            llm_response = await self.llm.get_llm_response(
+                user_input, results, lang=lang
+            )
+            return llm_response or ""
+
+        elif type == 'pro':
+            user_input = query
+            llm_questions: List[str] = await self.llm.get_llm_questions(
+                user_input, self.n_llm_questions, lang=lang
+            )
+            query_vectors = self.embedder.encode_queries(llm_questions)
+            results = self.milvus_db.search_similar_laws(
+                query_vectors, top_k=self.top_k, lang=lang
+            )
+            llm_response = await self.llm.get_llm_response(
+                user_input, results, lang=lang
+            )
+            return llm_response or ""
+
+        return ""
+
     async def get_response_from_doc(self, query: str, document_base64: str, type: str = 'base', lang: str = 'ru') -> None:
         """
         Запуск основного процесса поиска и получения ответа LLM.
@@ -137,6 +180,54 @@ class ProLawRAGSearch:
             if llm_response:
                 print("LLM Ответ:")
                 print(llm_response)
+
+    async def get_response_from_doc_text(
+        self,
+        query: str,
+        document_base64: str,
+        type: str = 'base',
+        lang: str = 'ru'
+    ) -> str:
+        """
+        Get response from document as text string (for bot integration).
+
+        Parameters:
+            query (str): User's question about the document.
+            document_base64 (str): Base64 encoded document.
+            type (str): Response type ('base' or 'pro').
+            lang (str): Language code ('ru' or 'kg').
+
+        Returns:
+            str: LLM response text.
+        """
+        if type == 'base':
+            doc_data = await self.llm.get_doc_data(document_base64=document_base64)
+            user_input = config.concat_query_and_doc(query, doc_data)
+            query_vectors = self.embedder.encode_queries(doc_data)
+            results = self.milvus_db.search_similar_laws(
+                query_vectors, top_k=self.top_k, lang=lang
+            )
+            llm_response = await self.llm.get_llm_response(
+                user_input, results, lang=lang
+            )
+            return llm_response or ""
+
+        elif type == 'pro':
+            doc_data = await self.llm.get_doc_data(document_base64=document_base64)
+            user_input = config.concat_query_and_doc(query, doc_data)
+            llm_questions: List[str] = await self.llm.get_llm_questions(
+                user_input, self.n_llm_questions, lang=lang
+            )
+            query_vectors = self.embedder.encode_queries(llm_questions)
+            results = self.milvus_db.search_similar_laws(
+                query_vectors, top_k=self.top_k, lang=lang
+            )
+            llm_response = await self.llm.get_llm_response(
+                user_input, results, lang=lang
+            )
+            return llm_response or ""
+
+        return ""
 
 # if __name__ == "__main__":
 #     searcher = LawRAGSearch()

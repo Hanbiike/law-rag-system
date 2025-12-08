@@ -36,6 +36,9 @@ AZURE_API_VERSION_NANO: Optional[str] = os.environ.get(
     "AZURE_API_VERSION_NANO"
 )
 
+# Telegram Bot configuration
+TELEGRAM_BOT_TOKEN: Optional[str] = os.environ.get("TELEGRAM_BOT_TOKEN")
+
 def get_questions_prompt(user_query, lang = 'ru'):
     if lang == 'ru':
         prompt = f"""

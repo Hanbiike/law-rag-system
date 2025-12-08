@@ -105,7 +105,8 @@ class UserRepository:
         self, 
         telegram_id: int, 
         initial_balance: int = 10,
-        lang: str = 'ru'
+        lang: str = 'ru',
+        response_type: str = 'base'
     ) -> bool:
         """
         Add a new user to the database.
@@ -114,6 +115,7 @@ class UserRepository:
         telegram_id (int): Unique Telegram ID of the user.
         initial_balance (int): Initial balance. Defaults to 10.
         lang (str): Language preference. Defaults to 'ru'.
+        response_type (str): Response type ('base' or 'pro'). Defaults to 'base'.
         
         Returns:
         bool: True if user added successfully, False otherwise.
@@ -129,12 +131,12 @@ class UserRepository:
         try:
             with self.db.get_cursor() as cursor:
                 query = """
-                    INSERT INTO users (telegram_id, balance, lang) 
-                    VALUES (%s, %s, %s)
+                    INSERT INTO users (telegram_id, balance, lang, response_type) 
+                    VALUES (%s, %s, %s, %s)
                 """
                 cursor.execute(
                     query, 
-                    (telegram_id, initial_balance, lang)
+                    (telegram_id, initial_balance, lang, response_type)
                 )
                 self.db.connection.commit()
                 print(
@@ -225,8 +227,6 @@ class UserRepository:
             return False
         
         try:
-            self.db.connection.start_transaction()
-            
             with self.db.get_cursor() as cursor:
                 # Check current balance if needed
                 if not allow_negative:
@@ -238,7 +238,6 @@ class UserRepository:
                     result = cursor.fetchone()
                     
                     if not result:
-                        self.db.connection.rollback()
                         print(
                             f"No user found with telegram_id "
                             f"{telegram_id}"
@@ -249,7 +248,6 @@ class UserRepository:
                     new_balance = current_balance + amount
                     
                     if new_balance < 0:
-                        self.db.connection.rollback()
                         print(
                             f"Insufficient balance for user "
                             f"{telegram_id}. Current: {current_balance}, "
@@ -264,26 +262,23 @@ class UserRepository:
                     WHERE telegram_id = %s
                 """
                 cursor.execute(query, (amount, telegram_id))
+                self.db.connection.commit()
                 
                 rows_affected = cursor.rowcount
                 
                 if rows_affected > 0:
-                    self.db.connection.commit()
                     print(
                         f"Balance updated for user {telegram_id} "
                         f"by {amount}"
                     )
                     return True
                 else:
-                    self.db.connection.rollback()
                     print(
                         f"No user found with telegram_id {telegram_id}"
                     )
                     return False
                     
         except Error as e:
-            if self.db.connection:
-                self.db.connection.rollback()
             print(f"Error updating balance: {e}")
             return False
     
@@ -384,13 +379,129 @@ class UserRepository:
             print(f"Error retrieving user: {e}")
             return None
 
+    def update_response_type(
+        self,
+        telegram_id: int,
+        response_type: str
+    ) -> bool:
+        """
+        Update the response type preference for a specific user.
+
+        Parameters:
+            telegram_id (int): The Telegram ID of the user.
+            response_type (str): Response type ('base' or 'pro').
+
+        Returns:
+            bool: True if update successful, False otherwise.
+        """
+        if not self.db.is_connected():
+            print("Database not connected")
+            return False
+
+        if response_type not in ('base', 'pro'):
+            print(f"Invalid response type: {response_type}")
+            return False
+
+        try:
+            with self.db.get_cursor() as cursor:
+                query = """
+                    UPDATE users 
+                    SET response_type = %s 
+                    WHERE telegram_id = %s
+                """
+                cursor.execute(query, (response_type, telegram_id))
+                self.db.connection.commit()
+
+                rows_affected = cursor.rowcount
+
+                if rows_affected > 0:
+                    print(
+                        f"Response type updated to '{response_type}' "
+                        f"for user {telegram_id}"
+                    )
+                    return True
+                else:
+                    print(f"No user found with telegram_id {telegram_id}")
+                    return False
+        except Error as e:
+            print(f"Error updating response type: {e}")
+            return False
+
+    def get_or_create_user(
+        self,
+        telegram_id: int,
+        initial_balance: int = 10,
+        lang: str = 'ru',
+        response_type: str = 'base'
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get user by telegram_id or create if not exists.
+
+        Parameters:
+            telegram_id (int): Unique Telegram ID of the user.
+            initial_balance (int): Initial balance for new user.
+            lang (str): Language preference for new user.
+            response_type (str): Response type for new user.
+
+        Returns:
+            Optional[Dict[str, Any]]: User data dictionary or None.
+        """
+        user = self.get_user(telegram_id)
+        if user:
+            return user
+
+        self.add_user(telegram_id, initial_balance, lang, response_type)
+        return self.get_user(telegram_id)
+
+    def get_user_with_response_type(
+        self,
+        telegram_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Retrieve user information including response_type.
+
+        Parameters:
+            telegram_id (int): The Telegram ID of the user.
+
+        Returns:
+            Optional[Dict[str, Any]]: User data with response_type or None.
+        """
+        if not self.db.is_connected():
+            print("Database not connected")
+            return None
+
+        try:
+            with self.db.get_cursor() as cursor:
+                query = """
+                    SELECT id, telegram_id, lang, response_type, 
+                           balance, last_conversation
+                    FROM users 
+                    WHERE telegram_id = %s
+                """
+                cursor.execute(query, (telegram_id,))
+                result = cursor.fetchone()
+
+                if result:
+                    return {
+                        'id': result[0],
+                        'telegram_id': result[1],
+                        'lang': result[2],
+                        'response_type': result[3],
+                        'balance': result[4],
+                        'last_conversation': result[5]
+                    }
+                return None
+        except Error as e:
+            print(f"Error retrieving user: {e}")
+            return None
+
 
 # MySQL connection settings
 db_config = {
     'host': 'localhost',
     'user': 'root',
     'password': 'root',
-    'database': 'law_rag_db',
+    'database': 'law_rag_users',
     'port': 8889
 }
 
