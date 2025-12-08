@@ -1,101 +1,402 @@
 # Law RAG System
 
-A modular Retrieval-Augmented Generation (RAG) system for legal document search and question answering, using Azure OpenAI, Milvus vector database, and custom embedding/LLM tools.
+Модульная система Retrieval-Augmented Generation (RAG) для поиска по юридическим документам и ответов на вопросы, использующая Azure OpenAI, векторную базу данных Milvus и модели для создания эмбеддингов.
 
-## Features
-- **Semantic search** over legal documents using vector embeddings
-- **LLM-powered query expansion** for better search results
-- **Integration with Azure OpenAI** (multiple deployments supported)
-- **Milvus vector database** for scalable similarity search
-- **Modular codebase** for easy extension and adaptation
+## Особенности
 
-## Project Structure
+- **Семантический поиск** по юридическим документам с использованием векторных эмбеддингов
+- **Расширение запросов через LLM** для улучшения результатов поиска
+- **Два режима поиска**: базовый (прямой поиск) и продвинутый (с генерацией уточняющих вопросов)
+- **Поддержка двух языков**: русский и кыргызский
+- **Анализ загруженных документов** (PDF) с извлечением структурированных данных
+- **Интеграция с Azure OpenAI** (несколько развертываний)
+- **Векторная БД Milvus** для масштабируемого поиска по сходству
+- **Модульная архитектура** для легкого расширения
+
+## Архитектура проекта
 
 ```
-├── aitools/
-│   ├── embedder.py         # Embedding utilities
-│   ├── llm.py              # LLM interaction utilities
+law-rag-system/
+├── aitools/                      # AI инструменты и модели
+│   ├── embedder.py              # Генерация эмбеддингов (SentenceTransformer)
+│   ├── llm.py                   # Работа с LLM через Azure OpenAI
+│   ├── docs_llm.py              # Извлечение данных из документов
 │   └── __pycache__/
-├── databases/
-│   ├── db.py               # Base DB logic
-│   ├── milvus_db.py        # Milvus DB integration
-│   ├── milvus_migrate.py   # Migration scripts
-│   ├── milvus_migrate_v2.py
+├── confs/                        # Конфигурация
+│   ├── config.py                # Загрузка переменных окружения и промпты
 │   └── __pycache__/
-├── config.py               # Loads config from .env
-├── pro_search.py           # Main search script (classic)
-├── pro_search_milvus.py    # Main search script (Milvus)
-├── search.py               # Search logic
-├── law_rag_db.json         # Example DB (JSON)
-├── law_rag_db_kg.json      # Example DB (KG JSON)
+├── databases/                    # Работа с базами данных
+│   ├── db.py                    # MySQL база данных (legacy)
+│   ├── milvus_db.py             # Milvus векторная БД
+│   ├── milvus_migrate.py        # Скрипты миграции
+│   ├── milvus_migrate_v2.py     # Скрипты миграции v2
+│   └── __pycache__/
+├── searchers/                    # Логика поиска
+│   ├── search.py                # Основной класс ProLawRAGSearch
+│   └── __pycache__/
+├── main.py                       # Точка входа приложения
+├── law_rag_db.json              # База законов (русский язык)
+├── law_rag_db_kg.json           # База законов (кыргызский язык)
+├── milvus_law_rag.db            # Локальная БД Milvus
+├── .env                          # Переменные окружения (не в git)
 ├── .gitignore
-└── ...
+└── README.md
 ```
 
-## Setup
+## Компоненты системы
 
-### 1. Clone the repository
+### 1. AI инструменты (`aitools/`)
+
+#### `embedder.py` - QueryEmbedder
+- Генерация векторных представлений (эмбеддингов) текста
+- Использует модель `google/embeddinggemma-300m` через SentenceTransformer
+- Поддержка GPU/CPU
+- Вычисление косинусного сходства между векторами
+
+#### `llm.py` - LLMHelper
+- Работа с Azure OpenAI для генерации ответов
+- Генерация уточняющих вопросов для улучшения поиска
+- Формирование развернутых ответов на основе найденных статей закона
+- Поддержка структурированного вывода через Pydantic модели
+
+#### `docs_llm.py` - Extractor
+- Извлечение структурированных данных из PDF документов
+- Разбивка документа на параграфы/пункты
+- Использование multimodal возможностей Azure OpenAI
+
+### 2. Базы данных (`databases/`)
+
+#### `milvus_db.py` - MilvusLawSearcher
+- Поиск похожих законов через Milvus
+- Коллекции для русского и кыргызского языков
+- Метрика COSINE для вычисления сходства
+- Возврат структурированных результатов с метаданными
+
+#### `db.py` (legacy)
+- Поддержка MySQL для хранения векторов
+- Используется в старых версиях системы
+
+### 3. Поиск (`searchers/`)
+
+#### `search.py` - ProLawRAGSearch
+Основной класс системы с двумя режимами работы:
+
+**Базовый режим** (`type='base'`):
+- Прямой поиск по пользовательскому запросу
+- Генерация эмбеддинга запроса
+- Поиск в Milvus
+- Генерация ответа через LLM
+
+**Продвинутый режим** (`type='pro'`):
+- Генерация уточняющих вопросов через LLM
+- Множественный поиск по сгенерированным вопросам
+- Агрегация результатов
+- Генерация финального ответа
+
+**Поиск по документу**:
+- Метод `get_response_from_doc()` для анализа загруженных PDF
+- Извлечение структуры документа
+- Поиск релевантных законов
+- Ответ на вопрос в контексте документа
+
+### 4. Конфигурация (`confs/`)
+
+#### `config.py`
+- Загрузка переменных окружения из `.env`
+- Конфигурация Azure OpenAI (основной и nano деплои)
+- Промпты для генерации вопросов и ответов на двух языках
+- Утилиты для объединения запросов и документов
+
+## Установка и настройка
+
+### 1. Клонирование репозитория
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/Hanbiike/law-rag-system.git
 cd law-rag-system
 ```
 
-### 2. Create and configure `.env`
-Create a `.env` file in the root directory with the following variables:
-
+### 2. Создание виртуального окружения
+```bash
+python3 -m venv venv
+source venv/bin/activate  # для Linux/macOS
+# или
+venv\Scripts\activate     # для Windows
 ```
-AZURE_ENDPOINT=your_azure_endpoint
-AZURE_OPENAI_API_KEY=your_azure_openai_api_key
-AZURE_DEPLOYMENT=your_azure_deployment
+
+### 3. Установка зависимостей
+```bash
+pip install pymilvus sentence-transformers openai python-dotenv torch pydantic
+```
+
+**Основные зависимости:**
+- `pymilvus` - клиент для Milvus
+- `sentence-transformers` - генерация эмбеддингов
+- `openai` - Azure OpenAI SDK
+- `python-dotenv` - управление переменными окружения
+- `torch` - PyTorch для моделей
+- `pydantic` - валидация данных
+
+### 4. Настройка `.env`
+Создайте файл `.env` в корне проекта:
+
+```env
+# Azure OpenAI основной деплой
+AZURE_ENDPOINT=https://your-endpoint.openai.azure.com/
+AZURE_OPENAI_API_KEY=your_api_key
+AZURE_DEPLOYMENT=your_deployment_name
 AZURE_API_VERSION=2025-03-01-preview
-AZURE_ENDPOINT_NANO=your_azure_endpoint_nano
-AZURE_OPENAI_API_KEY_NANO=your_azure_openai_api_key_nano
-AZURE_DEPLOYMENT_NANO=your_azure_deployment_nano
+
+# Azure OpenAI Nano деплой (для быстрых запросов)
+AZURE_ENDPOINT_NANO=https://your-endpoint-nano.openai.azure.com/
+AZURE_OPENAI_API_KEY_NANO=your_api_key_nano
+AZURE_DEPLOYMENT_NANO=your_deployment_nano_name
 AZURE_API_VERSION_NANO=2025-03-01-preview
 ```
 
-### 3. Install dependencies
-It is recommended to use a virtual environment:
+### 5. Подготовка базы данных
 
+Если у вас уже есть `milvus_law_rag.db`, система готова к использованию.
+
+Для создания новой базы данных используйте скрипты миграции:
 ```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
+python databases/milvus_migrate_v2.py
 ```
 
-If `requirements.txt` is missing, install manually:
-- `python-dotenv`
-- `pymilvus`
-- `openai` (or `azure-openai`)
-- Any other dependencies used in your code
+Убедитесь, что файлы `law_rag_db.json` и `law_rag_db_kg.json` содержат данные о законах.
 
-### 4. Prepare the database
-- Place your legal documents in `law_rag_db.json` or `law_rag_db_kg.json`.
-- Run migration scripts in `databases/` if needed to populate Milvus.
 
-### 5. Run the system
-For Milvus-based search:
-```bash
-python pro_search_milvus.py
+
+## Использование
+
+### Основной скрипт - `main.py`
+
+Система предоставляет гибкий API для различных сценариев использования:
+
+#### 1. Поиск по текстовому запросу
+
+**Базовый режим** (прямой поиск):
+```python
+from searchers import search
+import asyncio
+
+searcher = search.ProLawRAGSearch(top_k=3, n_llm_questions=2)
+
+# Поиск на русском языке
+asyncio.run(searcher.get_response(
+    "Какие права имеет работник при увольнении по сокращению штатов?",
+    type='base',
+    lang='ru'
+))
+
+# Поиск на кыргызском языке
+asyncio.run(searcher.get_response(
+    "Мени жумуштан мыйзамсыз чыгарса кандай укуктарым бар?",
+    type='base',
+    lang='kg'
+))
 ```
-For classic search:
-```bash
-python pro_search.py
+
+**Продвинутый режим** (с генерацией уточняющих вопросов):
+```python
+# LLM сгенерирует несколько уточняющих вопросов для улучшения поиска
+asyncio.run(searcher.get_response(
+    "Какие права имеет работник при увольнении по сокращению штатов?",
+    type='pro',
+    lang='ru'
+))
 ```
 
-## Usage
-- Enter your query when prompted.
-- The system will expand your query using LLM, search for relevant laws, and return the most similar results.
-- Optionally, the LLM will generate a final answer based on the retrieved documents.
+#### 2. Анализ загруженного документа
 
-## Notes
-- All secrets and API keys must be stored in `.env` (never commit them to git).
-- The `.gitignore` is set up to exclude cache, DB, and secret files.
-- For production, review and secure all credentials.
+```python
+import base64
 
-## License
-Specify your license here.
+# Загрузка PDF документа
+with open("pril-9-regl.pdf", "rb") as f:
+    data = f.read()
 
-## Authors
-- Askat Rakhymbekov
+base64_string = base64.b64encode(data).decode("utf-8")
+
+# Анализ документа и поиск релевантных законов
+asyncio.run(searcher.get_response_from_doc(
+    query="Законен ли данный документ?",
+    document_base64=base64_string,
+    type='pro',
+    lang='ru'
+))
+```
+
+### Параметры конфигурации
+
+**ProLawRAGSearch** принимает следующие параметры:
+- `top_k` (int, default=3): Количество наиболее релевантных результатов
+- `n_llm_questions` (int, default=2): Количество уточняющих вопросов, генерируемых LLM
+
+**Метод get_response**:
+- `query` (str): Вопрос пользователя
+- `type` (str): Режим поиска - `'base'` или `'pro'`
+- `lang` (str): Язык - `'ru'` (русский) или `'kg'` (кыргызский)
+
+**Метод get_response_from_doc**:
+- `query` (str): Вопрос о документе
+- `document_base64` (str): PDF документ в формате base64
+- `type` (str): Режим поиска - `'base'` или `'pro'`
+- `lang` (str): Язык ответа
+
+### Примеры вывода
+
+Система возвращает:
+1. **Сгенерированные запросы** (в режиме 'pro')
+2. **Список найденных законов** с метаданными:
+   - Источник документа
+   - Раздел
+   - Глава
+   - Название статьи
+   - Текст статьи
+   - Степень сходства (distance)
+3. **Развернутый ответ LLM** на основе найденных статей
+
+## Технические детали
+
+### Процесс поиска
+
+1. **Обработка запроса**:
+   - Базовый режим: прямое кодирование запроса
+   - Продвинутый режим: генерация уточняющих вопросов через LLM
+
+2. **Генерация эмбеддингов**:
+   - Использование модели `google/embeddinggemma-300m`
+   - Размерность векторов: 300
+   - Автоматический выбор GPU/CPU
+
+3. **Поиск в векторной БД**:
+   - Метрика: COSINE similarity
+   - Две коллекции: `law_collection` (русский), `law_collection_kg` (кыргызский)
+   - Возврат top_k наиболее похожих статей
+
+4. **Генерация ответа**:
+   - Формирование контекста из найденных статей
+   - Создание промпта с вопросом и контекстом
+   - Получение структурированного ответа через Azure OpenAI
+
+### Структура данных в Milvus
+
+Каждая запись содержит:
+- `source_doc` - источник (название закона)
+- `section` - раздел
+- `chapter` - глава
+- `article_title` - название статьи
+- `article_text` - текст статьи
+- `vector` - векторное представление (эмбеддинг)
+
+
+
+## Разработка и расширение
+
+### Добавление новых языков
+
+1. Подготовьте коллекцию в Milvus с суффиксом языка (например, `law_collection_en`)
+2. Добавьте промпты в `confs/config.py`:
+```python
+def get_questions_prompt(user_query, lang='ru'):
+    if lang == 'en':
+        prompt = f"Generate search queries based on: {user_query}"
+    # ...
+```
+3. Обновите `milvus_db.py` для поддержки нового языка
+
+### Добавление новых источников данных
+
+1. Создайте JSON файл с законами в формате:
+```json
+[
+    {
+        "source_doc": "Название закона",
+        "section": "Раздел",
+        "chapter": "Глава",
+        "article_title": "Название статьи",
+        "article_text": "Текст статьи"
+    }
+]
+```
+2. Используйте скрипты миграции для загрузки в Milvus
+
+### Настройка моделей
+
+Для изменения модели эмбеддингов отредактируйте `aitools/embedder.py`:
+```python
+self.model = SentenceTransformer("your-model-name", device=self.device)
+```
+
+Поддерживаемые модели: любые из HuggingFace Hub, совместимые с SentenceTransformer
+
+## Устранение неполадок
+
+### Проблема: "Error calling LLM"
+- Проверьте корректность настроек в `.env`
+- Убедитесь, что деплой Azure OpenAI активен
+- Проверьте квоты и лимиты API
+
+### Проблема: "Milvus connection error"
+- Убедитесь, что файл `milvus_law_rag.db` существует
+- Проверьте права доступа к файлу БД
+- Запустите миграцию заново
+
+### Проблема: "CUDA out of memory"
+- Модель автоматически переключится на CPU
+- Для принудительного использования CPU установите:
+```python
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = ''
+```
+
+### Проблема: Низкое качество результатов
+- Увеличьте `top_k` для получения большего количества результатов
+- Используйте режим `type='pro'` для улучшенного поиска
+- Увеличьте `n_llm_questions` для генерации большего количества запросов
+
+## Производительность
+
+- **Генерация эмбеддингов**: ~0.1-0.5 сек на запрос (GPU)
+- **Поиск в Milvus**: ~0.01-0.05 сек
+- **Генерация ответа LLM**: ~1-5 сек в зависимости от размера контекста
+- **Полный цикл (режим 'pro')**: ~3-10 сек
+
+## Безопасность
+
+⚠️ **Важно:**
+- Никогда не коммитьте файл `.env` в git
+- Храните API ключи в безопасном месте
+- Используйте ротацию ключей Azure OpenAI
+- Ограничьте доступ к базе данных Milvus
+- Проверяйте входные данные перед обработкой
+
+## Roadmap
+
+- [ ] Добавление поддержки других векторных БД (Pinecone, Qdrant)
+- [ ] Web интерфейс для удобного использования
+- [ ] API endpoint (FastAPI/Flask)
+- [ ] Поддержка дополнительных форматов документов (DOCX, HTML)
+- [ ] Кэширование результатов поиска
+- [ ] Метрики качества и A/B тестирование
+- [ ] Поддержка мультимодальных запросов (изображения + текст)
+
+## Лицензия
+
+Укажите вашу лицензию здесь.
+
+## Авторы
+
+- Askat Rakhymbekov (Hanbiike)
+
+## Благодарности
+
+- Azure OpenAI за предоставление LLM моделей
+- Milvus за векторную базу данных
+- SentenceTransformers за модели эмбеддингов
+- Google за модель embeddinggemma-300m
+
+## Контакты
+
+Для вопросов и предложений создавайте Issues в GitHub репозитории.
 - Contributors welcome!
