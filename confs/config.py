@@ -76,3 +76,7 @@ def get_response_prompt(user_query, context, lang = 'ru'):
         """
 
     return prompt
+
+def concat_query_and_doc(query: str, doc_data: list) -> str:
+    doc_text = "\n".join(doc_data)
+    return f"Question: {query}\n\nDocument:\n{doc_text}"

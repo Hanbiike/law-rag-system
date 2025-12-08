@@ -1,0 +1,74 @@
+from openai import AsyncAzureOpenAI
+import confs.config as config
+from pydantic import BaseModel
+from typing import List, Optional, Any
+
+class docQuery(BaseModel):
+    """
+    Модель для представления одного вопроса по документу.
+    """
+    paragraph: str
+
+class docDataExtraction(BaseModel):
+    """
+    Модель для представления списка вопросов по документу.
+    """
+    points: List[docQuery]
+
+class Extractor:
+    """
+    Класс-обёртка для работы с документами через LLM.
+    Предоставляет методы для генерации уточняющих вопросов и получения ответа на основе релевантных статей.
+    """
+
+    def __init__(self) -> None:
+        """
+        Инициализация клиентов для разных деплоев Azure OpenAI.
+        """
+        # self.client = AsyncAzureOpenAI(
+        #     azure_deployment=config.AZURE_DEPLOYMENT,
+        #     api_version=config.AZURE_API_VERSION,
+        #     azure_endpoint=config.AZURE_ENDPOINT,
+        #     api_key=config.AZURE_OPENAI_API_KEY
+        # )
+        self.nano_client = AsyncAzureOpenAI(
+            azure_deployment=config.AZURE_DEPLOYMENT_NANO,
+            api_version=config.AZURE_API_VERSION_NANO,
+            azure_endpoint=config.AZURE_ENDPOINT_NANO,
+            api_key=config.AZURE_OPENAI_API_KEY_NANO
+        )
+
+    async def get_doc_data(self, document_base64: str) -> Optional[List[str]]:
+        """
+        Генерирует уточняющие вопросы для поиска по базе законов.
+
+        Parameters:
+        user_query (str): Вопрос пользователя.
+        top_k (int): Количество лучших вопросов для возврата.
+
+        Returns:
+        Optional[List[str]]: Список уточняющих вопросов или None в случае ошибки.
+        """
+        try:
+            response = await self.nano_client.responses.parse(
+                model=config.AZURE_DEPLOYMENT_NANO,
+                instructions="You are an expert in extracting structured data. You will be given unstructured text from a legal document, and you must break it into items/paragraphs. Place the result into the specified structure. Respond in the language of the context.",
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            { "type": "input_text", "text": "Break it into items/paragraphs." },
+                            {
+                                "type": "input_file",
+                                "filename": "pril-9-regl.pdf",
+                                "file_data": f"data:application/pdf;base64,{document_base64}",
+                            }
+                        ],
+                    },
+                ],
+                text_format=docDataExtraction
+            )
+            return [q.paragraph for q in response.output_parsed.points]
+        except Exception as e:
+            print(f"Error calling LLM: {e}")
+            return None

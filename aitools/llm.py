@@ -53,7 +53,7 @@ class LLMHelper:
         try:
             response = await self.nano_client.responses.parse(
                 model=config.AZURE_DEPLOYMENT_NANO,
-                instructions="Ты юридический помощник, который помогает людям понимать законы.",
+                instructions="You are a legal assistant who helps people understand laws. Respond in the language of the context.",
                 input=prompt,
                 text_format=Queries
             )
@@ -82,7 +82,7 @@ class LLMHelper:
         try:
             response = await self.nano_client.responses.create(
                 model=config.AZURE_DEPLOYMENT_NANO,
-                instructions="Ты юридический помощник, который помогает людям понимать законы.",
+                instructions="You are a legal assistant who helps people understand laws. Respond in the language of the context.",
                 input=prompt
             )
             return response.output_text
