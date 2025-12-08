@@ -97,5 +97,5 @@ python pro_search.py
 Specify your license here.
 
 ## Authors
-- Your Name (your.email@example.com)
+- Askat Rakhymbekov
 - Contributors welcome!
