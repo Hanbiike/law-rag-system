@@ -15,6 +15,18 @@ class Queries(BaseModel):
     """
     questions: List[Query]
 
+class docQuery(BaseModel):
+    """
+    Модель для представления одного вопроса по документу.
+    """
+    paragraph: str
+
+class docDataExtraction(BaseModel):
+    """
+    Модель для представления списка вопросов по документу.
+    """
+    points: List[docQuery]
+
 class LLMHelper:
     """
     Класс-обёртка для работы с LLM через Azure OpenAI.
@@ -86,6 +98,41 @@ class LLMHelper:
                 input=prompt
             )
             return response.output_text
+        except Exception as e:
+            print(f"Error calling LLM: {e}")
+            return None
+        
+    async def get_doc_data(self, document_base64: str) -> Optional[List[str]]:
+        """
+        Генерирует уточняющие вопросы для поиска по базе законов.
+
+        Parameters:
+        user_query (str): Вопрос пользователя.
+        top_k (int): Количество лучших вопросов для возврата.
+
+        Returns:
+        Optional[List[str]]: Список уточняющих вопросов или None в случае ошибки.
+        """
+        try:
+            response = await self.nano_client.responses.parse(
+                model=config.AZURE_DEPLOYMENT_NANO,
+                instructions="You are an expert in extracting structured data. You will be given unstructured text from a legal document, and you must break it into items/paragraphs. Place the result into the specified structure. Respond in the language of the context.",
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            { "type": "input_text", "text": "Break it into items/paragraphs." },
+                            {
+                                "type": "input_file",
+                                "filename": "pril-9-regl.pdf",
+                                "file_data": f"data:application/pdf;base64,{document_base64}",
+                            }
+                        ],
+                    },
+                ],
+                text_format=docDataExtraction
+            )
+            return [q.paragraph for q in response.output_parsed.points]
         except Exception as e:
             print(f"Error calling LLM: {e}")
             return None

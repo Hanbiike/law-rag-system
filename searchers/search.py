@@ -1,7 +1,6 @@
 import asyncio
 import databases.milvus_db as milvus_db
 import aitools.llm as llm
-import aitools.docs_llm as docs_llm
 import aitools.embedder as embedder
 import confs.config as config
 from typing import List
@@ -23,7 +22,6 @@ class ProLawRAGSearch:
         self.embedder = embedder.QueryEmbedder()
         self.milvus_db = milvus_db.MilvusLawSearcher()
         self.llm = llm.LLMHelper()
-        self.docs_llm = docs_llm.Extractor()
 
     async def get_response(self, query: str, type: str = 'base', lang: str = 'ru') -> None:
         """
@@ -84,7 +82,7 @@ class ProLawRAGSearch:
         Запуск основного процесса поиска и получения ответа LLM.
         """
         if type == 'base':
-            doc_data = await self.docs_llm.get_doc_data(document_base64=document_base64)
+            doc_data = await self.llm.get_doc_data(document_base64=document_base64)
 
             user_input = config.concat_query_and_doc(query, doc_data)
 
@@ -112,7 +110,7 @@ class ProLawRAGSearch:
                 print(llm_response)
 
         elif type == 'pro':
-            doc_data = await self.docs_llm.get_doc_data(document_base64=document_base64)
+            doc_data = await self.llm.get_doc_data(document_base64=document_base64)
 
             user_input = config.concat_query_and_doc(query, doc_data)
             # Получение уточняющих вопросов от LLM
