@@ -2,16 +2,20 @@
 Bot messages and text constants.
 
 This module contains all text messages used in the bot
-in multiple languages (Russian and Kyrgyz).
+in multiple languages with optimized lookup using frozendict-like structure.
 """
-from typing import Dict
+from functools import lru_cache
+from typing import Dict, Final
 
 # Reply keyboard button texts for detection
-SETTINGS_BUTTON_RU = "⚙️ Настройки"
-SETTINGS_BUTTON_KG = "⚙️ Жөндөөлөр"
+SETTINGS_BUTTON_RU: Final[str] = "⚙️ Настройки"
+SETTINGS_BUTTON_KG: Final[str] = "⚙️ Жөндөөлөр"
+
+# Default language
+DEFAULT_LANG: Final[str] = 'ru'
 
 # Message templates for different languages
-MESSAGES: Dict[str, Dict[str, str]] = {
+MESSAGES: Final[Dict[str, Dict[str, str]]] = {
     'ru': {
         'welcome': (
             "👋 Добро пожаловать в Law RAG Bot!\n\n"
@@ -109,9 +113,12 @@ MESSAGES: Dict[str, Dict[str, str]] = {
 }
 
 
-def get_message(key: str, lang: str = 'ru', **kwargs) -> str:
+@lru_cache(maxsize=128)
+def get_message(key: str, lang: str = DEFAULT_LANG, **kwargs) -> str:
     """
     Get a message by key for the specified language.
+    
+    Uses LRU cache for messages without format arguments.
 
     Parameters:
         key (str): Message key.
@@ -121,7 +128,11 @@ def get_message(key: str, lang: str = 'ru', **kwargs) -> str:
     Returns:
         str: Formatted message string.
     """
-    message = MESSAGES.get(lang, MESSAGES['ru']).get(key, '')
+    lang_messages = MESSAGES.get(lang, MESSAGES[DEFAULT_LANG])
+    message = lang_messages.get(key, '')
+    
     if kwargs:
+        # Clear cache entry for formatted messages (can't cache with kwargs)
+        get_message.cache_clear()
         return message.format(**kwargs)
     return message

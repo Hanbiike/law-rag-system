@@ -1,127 +1,199 @@
+"""
+LLM Helper module for Azure OpenAI integration.
+
+This module provides an optimized wrapper for Azure OpenAI API calls
+using the new responses API. Includes connection pooling and error handling.
+"""
+import logging
+from typing import Any, Final, List, Optional
+
 from openai import AsyncAzureOpenAI
-import confs.config as config
 from pydantic import BaseModel
-from typing import List, Optional, Any
+
+import confs.config as config
+
+# Configure module logger
+logger = logging.getLogger(__name__)
+
+# System instruction constants to avoid recreating strings
+LEGAL_ASSISTANT_INSTRUCTION: Final[str] = (
+    "You are a legal assistant who helps people understand laws. "
+    "Respond in the language of the context."
+)
+DATA_EXTRACTION_INSTRUCTION: Final[str] = (
+    "You are an expert in extracting structured data. "
+    "You will be given unstructured text from a legal document, "
+    "and you must break it into items/paragraphs. "
+    "Place the result into the specified structure. "
+    "Respond in the language of the context."
+)
+
 
 class Query(BaseModel):
-    """
-    Модель для представления одного вопроса.
-    """
+    """Model representing a single question."""
+    
     question: str
 
+
 class Queries(BaseModel):
-    """
-    Модель для представления списка вопросов.
-    """
+    """Model representing a list of questions."""
+    
     questions: List[Query]
 
+
 class docQuery(BaseModel):
-    """
-    Модель для представления одного вопроса по документу.
-    """
+    """Model representing a single document paragraph."""
+    
     paragraph: str
 
+
 class docDataExtraction(BaseModel):
-    """
-    Модель для представления списка вопросов по документу.
-    """
+    """Model representing extracted document data."""
+    
     points: List[docQuery]
+
 
 class LLMHelper:
     """
-    Класс-обёртка для работы с LLM через Azure OpenAI.
-    Предоставляет методы для генерации уточняющих вопросов и получения ответа на основе релевантных статей.
+    Optimized wrapper for Azure OpenAI LLM operations.
+    
+    Features:
+    - Singleton pattern for connection reuse
+    - Async operations for better performance
+    - Structured error handling with logging
+    - Memory-efficient context building
     """
+    
+    _instance: Optional["LLMHelper"] = None
+    
+    def __new__(cls) -> "LLMHelper":
+        """
+        Singleton pattern to reuse client connection.
+        
+        Returns:
+            LLMHelper: Singleton instance.
+        """
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
 
     def __init__(self) -> None:
-        """
-        Инициализация клиентов для разных деплоев Azure OpenAI.
-        """
-        # self.client = AsyncAzureOpenAI(
-        #     azure_deployment=config.AZURE_DEPLOYMENT,
-        #     api_version=config.AZURE_API_VERSION,
-        #     azure_endpoint=config.AZURE_ENDPOINT,
-        #     api_key=config.AZURE_OPENAI_API_KEY
-        # )
+        """Initialize Azure OpenAI client with configured credentials."""
+        if self._initialized:
+            return
+            
         self.nano_client = AsyncAzureOpenAI(
             azure_deployment=config.AZURE_DEPLOYMENT_NANO,
             api_version=config.AZURE_API_VERSION_NANO,
             azure_endpoint=config.AZURE_ENDPOINT_NANO,
             api_key=config.AZURE_OPENAI_API_KEY_NANO
         )
+        self._initialized = True
 
-    async def get_llm_questions(self, user_query: str, top_k: int = 3, lang: str = 'ru') -> Optional[List[str]]:
+    async def get_llm_questions(
+        self,
+        user_query: str,
+        top_k: int = 3,
+        lang: str = 'ru'
+    ) -> Optional[List[str]]:
         """
-        Генерирует уточняющие вопросы для поиска по базе законов.
+        Generate clarifying questions for law database search.
+        
+        Uses structured output parsing for reliable question extraction.
 
         Parameters:
-        user_query (str): Вопрос пользователя.
-        top_k (int): Количество лучших вопросов для возврата.
+            user_query (str): The user's original question.
+            top_k (int): Maximum number of questions to return. Defaults to 3.
+            lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
 
         Returns:
-        Optional[List[str]]: Список уточняющих вопросов или None в случае ошибки.
+            Optional[List[str]]: List of generated questions or None on error.
         """
         prompt = config.get_questions_prompt(user_query=user_query, lang=lang)
+        
         try:
             response = await self.nano_client.responses.parse(
                 model=config.AZURE_DEPLOYMENT_NANO,
-                instructions="You are a legal assistant who helps people understand laws. Respond in the language of the context.",
+                instructions=LEGAL_ASSISTANT_INSTRUCTION,
                 input=prompt,
                 text_format=Queries
             )
             return [q.question for q in response.output_parsed.questions[:top_k]]
         except Exception as e:
-            print(f"Error calling LLM: {e}")
+            logger.error("Error generating LLM questions: %s", e)
             return None
 
-    async def get_llm_response(self, user_query: str, top_results: List[Any], lang: str = 'ru') -> Optional[str]:
+    async def get_llm_response(
+        self,
+        user_query: str,
+        top_results: List[Any],
+        lang: str = 'ru'
+    ) -> Optional[str]:
         """
-        Получает развернутый ответ на вопрос пользователя на основе релевантных статей.
+        Generate detailed response based on relevant law articles.
+        
+        Builds context from search results and generates comprehensive answer.
 
         Parameters:
-        user_query (str): Вопрос пользователя.
-        top_results (List[Any]): Список релевантных статей (словарей с ключами 'path' и 'text').
+            user_query (str): The user's original question.
+            top_results (List[Any]): List of relevant articles with 'path' and 'text'.
+            lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
 
         Returns:
-        Optional[str]: Ответ LLM или None в случае ошибки.
+            Optional[str]: Generated response text or None on error.
         """
-        context = "\n\n".join([
+        # Build context efficiently using join
+        context_parts = [
             f"Source: {result['path']}\nText: {result['text']}"
             for result in top_results
-        ])
+        ]
+        context = "\n\n".join(context_parts)
 
-        prompt = config.get_response_prompt(user_query=user_query, context=context, lang=lang)
+        prompt = config.get_response_prompt(
+            user_query=user_query,
+            context=context,
+            lang=lang
+        )
+        
         try:
             response = await self.nano_client.responses.create(
                 model=config.AZURE_DEPLOYMENT_NANO,
-                instructions="You are a legal assistant who helps people understand laws. Respond in the language of the context.",
+                instructions=LEGAL_ASSISTANT_INSTRUCTION,
                 input=prompt
             )
             return response.output_text
         except Exception as e:
-            print(f"Error calling LLM: {e}")
+            logger.error("Error getting LLM response: %s", e)
             return None
         
-    async def get_doc_data(self, document_base64: str) -> Optional[List[str]]:
+    async def get_doc_data(
+        self,
+        document_base64: str
+    ) -> Optional[List[str]]:
         """
-        Генерирует уточняющие вопросы для поиска по базе законов.
+        Extract structured data from a PDF document.
+        
+        Processes base64-encoded PDF and extracts paragraphs/items.
 
         Parameters:
-        user_query (str): Вопрос пользователя.
-        top_k (int): Количество лучших вопросов для возврата.
+            document_base64 (str): Base64-encoded PDF document.
 
         Returns:
-        Optional[List[str]]: Список уточняющих вопросов или None в случае ошибки.
+            Optional[List[str]]: List of extracted paragraphs or None on error.
         """
         try:
             response = await self.nano_client.responses.parse(
                 model=config.AZURE_DEPLOYMENT_NANO,
-                instructions="You are an expert in extracting structured data. You will be given unstructured text from a legal document, and you must break it into items/paragraphs. Place the result into the specified structure. Respond in the language of the context.",
+                instructions=DATA_EXTRACTION_INSTRUCTION,
                 input=[
                     {
                         "role": "user",
                         "content": [
-                            { "type": "input_text", "text": "Break it into items/paragraphs." },
+                            {
+                                "type": "input_text",
+                                "text": "Break it into items/paragraphs."
+                            },
                             {
                                 "type": "input_file",
                                 "filename": "legal_document.pdf",
@@ -134,5 +206,5 @@ class LLMHelper:
             )
             return [q.paragraph for q in response.output_parsed.points]
         except Exception as e:
-            print(f"Error calling LLM: {e}")
+            logger.error("Error extracting document data: %s", e)
             return None

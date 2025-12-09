@@ -1,114 +1,143 @@
 """
 Keyboard layouts for Telegram bot.
 
-This module contains all inline keyboard markups used in the bot
-for language selection and response type selection.
+This module contains optimized inline keyboard markups used in the bot
+with caching for frequently used keyboards.
 """
+from functools import lru_cache
+from typing import Final
+
 from aiogram.types import (
-    InlineKeyboardMarkup,
     InlineKeyboardButton,
-    ReplyKeyboardMarkup,
+    InlineKeyboardMarkup,
     KeyboardButton,
+    ReplyKeyboardMarkup,
     ReplyKeyboardRemove
 )
+
+# Button text constants
+LANG_RU_TEXT: Final[str] = "🇷🇺 Русский"
+LANG_KG_TEXT: Final[str] = "🇰🇬 Кыргызча"
+
+# Keyboard button texts by language
+KEYBOARD_TEXTS: Final[dict] = {
+    'ru': {
+        'base': "📝 Базовый",
+        'pro': "⚡ Продвинутый",
+        'settings': "⚙️ Настройки",
+        'change_lang': "🌐 Сменить язык",
+        'change_type': "📋 Сменить режим"
+    },
+    'kg': {
+        'base': "📝 Негизги",
+        'pro': "⚡ Кеңейтилген",
+        'settings': "⚙️ Жөндөөлөр",
+        'change_lang': "🌐 Тилди өзгөртүү",
+        'change_type': "📋 Режимди өзгөртүү"
+    }
+}
+
+# Pre-built language keyboard (constant, can be cached)
+_LANGUAGE_KEYBOARD: Final[InlineKeyboardMarkup] = InlineKeyboardMarkup(
+    inline_keyboard=[
+        [
+            InlineKeyboardButton(text=LANG_RU_TEXT, callback_data="lang_ru"),
+            InlineKeyboardButton(text=LANG_KG_TEXT, callback_data="lang_kg")
+        ]
+    ]
+)
+
+# Singleton keyboard remover
+_KEYBOARD_REMOVER: Final[ReplyKeyboardRemove] = ReplyKeyboardRemove()
 
 
 def get_language_keyboard() -> InlineKeyboardMarkup:
     """
-    Create inline keyboard for language selection.
+    Get inline keyboard for language selection.
+    
+    Returns pre-built singleton keyboard for efficiency.
 
     Returns:
-        InlineKeyboardMarkup: Keyboard with language options (Russian, Kyrgyz).
+        InlineKeyboardMarkup: Keyboard with language options.
     """
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(text="🇷🇺 Русский", callback_data="lang_ru"),
-            InlineKeyboardButton(text="🇰🇬 Кыргызча", callback_data="lang_kg")
-        ]
-    ])
-    return keyboard
+    return _LANGUAGE_KEYBOARD
 
 
+@lru_cache(maxsize=4)
 def get_response_type_keyboard(lang: str = 'ru') -> InlineKeyboardMarkup:
     """
     Create inline keyboard for response type selection.
+    
+    Cached per language for performance.
 
     Parameters:
-        lang (str): Language code ('ru' or 'kg') for button labels.
+        lang (str): Language code ('ru' or 'kg').
 
     Returns:
-        InlineKeyboardMarkup: Keyboard with response type options (Base, Pro).
+        InlineKeyboardMarkup: Keyboard with response type options.
     """
-    if lang == 'ru':
-        base_text = "📝 Базовый"
-        pro_text = "⚡ Продвинутый"
-    else:
-        base_text = "📝 Негизги"
-        pro_text = "⚡ Кеңейтилген"
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+    texts = KEYBOARD_TEXTS.get(lang, KEYBOARD_TEXTS['ru'])
+    
+    return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text=base_text, callback_data="type_base"),
-            InlineKeyboardButton(text=pro_text, callback_data="type_pro")
+            InlineKeyboardButton(text=texts['base'], callback_data="type_base"),
+            InlineKeyboardButton(text=texts['pro'], callback_data="type_pro")
         ]
     ])
-    return keyboard
 
 
+@lru_cache(maxsize=4)
 def get_main_reply_keyboard(lang: str = 'ru') -> ReplyKeyboardMarkup:
     """
     Create reply keyboard with settings button.
+    
+    Cached per language for performance.
 
     Parameters:
-        lang (str): Language code ('ru' or 'kg') for button label.
+        lang (str): Language code ('ru' or 'kg').
 
     Returns:
         ReplyKeyboardMarkup: Keyboard with settings button.
     """
-    if lang == 'ru':
-        settings_text = "⚙️ Настройки"
-    else:
-        settings_text = "⚙️ Жөндөөлөр"
-
-    keyboard = ReplyKeyboardMarkup(
+    texts = KEYBOARD_TEXTS.get(lang, KEYBOARD_TEXTS['ru'])
+    
+    return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=settings_text)]
+            [KeyboardButton(text=texts['settings'])]
         ],
         resize_keyboard=True,
         is_persistent=True
     )
-    return keyboard
 
 
+@lru_cache(maxsize=4)
 def get_settings_inline_keyboard(lang: str = 'ru') -> InlineKeyboardMarkup:
     """
     Create inline keyboard for settings menu.
+    
+    Cached per language for performance.
 
     Parameters:
-        lang (str): Language code ('ru' or 'kg') for button labels.
+        lang (str): Language code ('ru' or 'kg').
 
     Returns:
-        InlineKeyboardMarkup: Keyboard with language and type change options.
+        InlineKeyboardMarkup: Keyboard with settings options.
     """
-    if lang == 'ru':
-        change_lang_text = "🌐 Сменить язык"
-        change_type_text = "📋 Сменить режим"
-    else:
-        change_lang_text = "🌐 Тилди өзгөртүү"
-        change_type_text = "📋 Режимди өзгөртүү"
-
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=change_lang_text, callback_data="change_lang")],
-        [InlineKeyboardButton(text=change_type_text, callback_data="change_type")]
+    texts = KEYBOARD_TEXTS.get(lang, KEYBOARD_TEXTS['ru'])
+    
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=texts['change_lang'], callback_data="change_lang")],
+        [InlineKeyboardButton(text=texts['change_type'], callback_data="change_type")]
     ])
-    return keyboard
 
 
 def remove_keyboard() -> ReplyKeyboardRemove:
     """
-    Remove reply keyboard.
+    Get keyboard remover.
+    
+    Returns singleton for efficiency.
 
     Returns:
         ReplyKeyboardRemove: Object to remove keyboard.
     """
-    return ReplyKeyboardRemove()
+    return _KEYBOARD_REMOVER

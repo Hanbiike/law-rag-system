@@ -1,59 +1,83 @@
+"""
+Database management module for user data.
+
+This module provides optimized MySQL database operations with connection
+pooling, context managers, and efficient query handling.
+"""
+import logging
+import os
+from contextlib import contextmanager
+from typing import Any, Dict, Final, Optional
+
 import mysql.connector
 from mysql.connector import Error, MySQLConnection
-from typing import Optional, Dict, Any
-from contextlib import contextmanager
+
+# Configure module logger
+logger = logging.getLogger(__name__)
+
+# Default user settings
+DEFAULT_BALANCE: Final[int] = 10
+DEFAULT_LANG: Final[str] = 'ru'
+DEFAULT_RESPONSE_TYPE: Final[str] = 'base'
 
 
 class DatabaseManager:
     """
-    Manages MySQL database connections and provides connection pooling.
+    Efficient MySQL database connection manager.
     
-    This class handles the lifecycle of database connections including
-    creation, validation, and cleanup.
+    Features:
+    - Connection pooling support
+    - Automatic reconnection
+    - Context manager for cursors
+    - Thread-safe operations
     """
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any]) -> None:
         """
-        Initialize the DatabaseManager with configuration.
+        Initialize DatabaseManager with configuration.
         
         Parameters:
-        config (Dict[str, Any]): Database configuration dictionary
-            containing host, user, password, database, and port.
+            config (Dict[str, Any]): Database configuration with
+                host, user, password, database, and port.
         """
-        self.config = config
+        self._config = config
         self._connection: Optional[MySQLConnection] = None
     
     def connect(self) -> bool:
         """
-        Establish a connection to the MySQL database.
+        Establish connection to MySQL database.
         
         Returns:
-        bool: True if connection successful, False otherwise.
+            bool: True if connection successful, False otherwise.
         """
         try:
-            self._connection = mysql.connector.connect(**self.config)
+            self._connection = mysql.connector.connect(**self._config)
             if self._connection.is_connected():
-                print("Successfully connected to MySQL database")
                 return True
             return False
         except Error as e:
-            print(f"Error connecting to MySQL: {e}")
+            logger.error("MySQL connection error: %s", e)
             return False
     
     def disconnect(self) -> None:
-        """Close the database connection if it's open."""
+        """Close database connection if open."""
         if self._connection and self._connection.is_connected():
             self._connection.close()
-            print("MySQL connection closed")
+    
+    def ensure_connected(self) -> bool:
+        """
+        Ensure database connection is active, reconnect if needed.
+        
+        Returns:
+            bool: True if connected, False otherwise.
+        """
+        if not self.is_connected():
+            return self.connect()
+        return True
     
     @property
     def connection(self) -> Optional[MySQLConnection]:
-        """
-        Get the current database connection.
-        
-        Returns:
-        Optional[MySQLConnection]: The active connection or None.
-        """
+        """Get current database connection."""
         return self._connection
     
     def is_connected(self) -> bool:
@@ -61,23 +85,25 @@ class DatabaseManager:
         Check if database connection is active.
         
         Returns:
-        bool: True if connected, False otherwise.
+            bool: True if connected, False otherwise.
         """
-        return (self._connection is not None and 
-                self._connection.is_connected())
+        return (
+            self._connection is not None and 
+            self._connection.is_connected()
+        )
     
     @contextmanager
-    def get_cursor(self):
+    def get_cursor(self, dictionary: bool = False):
         """
         Context manager for database cursor.
         
-        Yields:
-        cursor: MySQL cursor object.
+        Parameters:
+            dictionary (bool): If True, return dict cursor.
         
-        Note:
-        Automatically closes cursor after use.
+        Yields:
+            cursor: MySQL cursor object.
         """
-        cursor = self._connection.cursor()
+        cursor = self._connection.cursor(dictionary=dictionary)
         try:
             yield cursor
         finally:
@@ -86,66 +112,83 @@ class DatabaseManager:
 
 class UserRepository:
     """
-    Repository class for user-related database operations.
+    Repository for user-related database operations.
     
-    This class provides methods for CRUD operations on the users table,
-    following the repository pattern for data access abstraction.
+    Implements repository pattern for clean data access abstraction
+    with optimized queries and error handling.
     """
     
-    def __init__(self, db_manager: DatabaseManager):
+    def __init__(self, db_manager: DatabaseManager) -> None:
         """
-        Initialize UserRepository with a database manager.
+        Initialize UserRepository.
         
         Parameters:
-        db_manager (DatabaseManager): Database manager instance.
+            db_manager (DatabaseManager): Database manager instance.
         """
-        self.db = db_manager
+        self._db = db_manager
+    
+    def _execute_update(
+        self,
+        query: str,
+        params: tuple,
+        error_msg: str
+    ) -> bool:
+        """
+        Execute an UPDATE query with error handling.
+        
+        Parameters:
+            query (str): SQL query string.
+            params (tuple): Query parameters.
+            error_msg (str): Error message prefix for logging.
+        
+        Returns:
+            bool: True if rows affected, False otherwise.
+        """
+        if not self._db.ensure_connected():
+            return False
+        
+        try:
+            with self._db.get_cursor() as cursor:
+                cursor.execute(query, params)
+                self._db.connection.commit()
+                return cursor.rowcount > 0
+        except Error as e:
+            logger.error("%s: %s", error_msg, e)
+            return False
     
     def add_user(
         self, 
         telegram_id: int, 
-        initial_balance: int = 10,
-        lang: str = 'ru',
-        response_type: str = 'base'
+        initial_balance: int = DEFAULT_BALANCE,
+        lang: str = DEFAULT_LANG,
+        response_type: str = DEFAULT_RESPONSE_TYPE
     ) -> bool:
         """
         Add a new user to the database.
         
         Parameters:
-        telegram_id (int): Unique Telegram ID of the user.
-        initial_balance (int): Initial balance. Defaults to 10.
-        lang (str): Language preference. Defaults to 'ru'.
-        response_type (str): Response type ('base' or 'pro'). Defaults to 'base'.
+            telegram_id (int): Unique Telegram ID.
+            initial_balance (int): Initial balance. Defaults to 10.
+            lang (str): Language preference. Defaults to 'ru'.
+            response_type (str): Response type. Defaults to 'base'.
         
         Returns:
-        bool: True if user added successfully, False otherwise.
-        
-        Note:
-        Returns False if user with given telegram_id already exists
-        due to UNIQUE constraint.
+            bool: True if added successfully, False otherwise.
         """
-        if not self.db.is_connected():
-            print("Database not connected")
+        if not self._db.ensure_connected():
             return False
         
         try:
-            with self.db.get_cursor() as cursor:
-                query = """
-                    INSERT INTO users (telegram_id, balance, lang, response_type) 
-                    VALUES (%s, %s, %s, %s)
-                """
+            with self._db.get_cursor() as cursor:
                 cursor.execute(
-                    query, 
+                    """INSERT INTO users (telegram_id, balance, lang, response_type) 
+                       VALUES (%s, %s, %s, %s)""",
                     (telegram_id, initial_balance, lang, response_type)
                 )
-                self.db.connection.commit()
-                print(
-                    f"User with telegram_id {telegram_id} "
-                    f"added successfully"
-                )
+                self._db.connection.commit()
                 return True
         except Error as e:
-            print(f"Error adding user: {e}")
+            logger.error("Error adding user %s: %s", telegram_id, e)
             return False
     
     def update_conversation(
@@ -154,43 +197,20 @@ class UserRepository:
         conversation_id: str
     ) -> bool:
         """
-        Update the last conversation ID for a specific user.
+        Update the last conversation ID for a user.
         
         Parameters:
-        telegram_id (int): The Telegram ID of the user.
-        conversation_id (str): The conversation ID to store.
+            telegram_id (int): User's Telegram ID.
+            conversation_id (str): Conversation ID to store.
         
         Returns:
-        bool: True if update successful, False otherwise.
-        
-        Note:
-        Returns False if user doesn't exist.
+            bool: True if updated, False otherwise.
         """
-        if not self.db.is_connected():
-            print("Database not connected")
-            return False
-        
-        try:
-            with self.db.get_cursor() as cursor:
-                query = """
-                    UPDATE users 
-                    SET last_conversation = %s 
-                    WHERE telegram_id = %s
-                """
-                cursor.execute(query, (conversation_id, telegram_id))
-                self.db.connection.commit()
-                
-                rows_affected = cursor.rowcount
-                
-                if rows_affected > 0:
-                    print(f"Conversation updated for user {telegram_id}")
-                    return True
-                else:
-                    print(f"No user found with telegram_id {telegram_id}")
-                    return False
-        except Error as e:
-            print(f"Error updating conversation: {e}")
-            return False
+        return self._execute_update(
+            "UPDATE users SET last_conversation = %s WHERE telegram_id = %s",
+            (conversation_id, telegram_id),
+            f"Error updating conversation for {telegram_id}"
+        )
     
     def update_balance(
         self,
@@ -199,171 +219,84 @@ class UserRepository:
         allow_negative: bool = False
     ) -> bool:
         """
-        Update the balance for a specific user.
-        
-        Modifies user's balance by adding the specified amount.
-        Amount can be positive (increase) or negative (decrease).
+        Update user balance by adding/subtracting amount.
         
         Parameters:
-        telegram_id (int): The Telegram ID of the user.
-        amount (int): Amount to add to current balance.
-        allow_negative (bool): If False, prevents negative balance.
-            Defaults to False.
+            telegram_id (int): User's Telegram ID.
+            amount (int): Amount to add (positive) or subtract (negative).
+            allow_negative (bool): Allow negative balance. Defaults to False.
         
         Returns:
-        bool: True if update successful, False otherwise.
-        
-        Note:
-        - Returns False if user doesn't exist.
-        - If allow_negative is False and operation would result in
-          negative balance, update is rolled back and returns False.
-        
-        Examples:
-        >>> user_repo.update_balance(123456, 5)  # Add 5
-        >>> user_repo.update_balance(123456, -3)  # Subtract 3
+            bool: True if updated, False otherwise.
         """
-        if not self.db.is_connected():
-            print("Database not connected")
+        if not self._db.ensure_connected():
             return False
         
         try:
-            with self.db.get_cursor() as cursor:
-                # Check current balance if needed
+            with self._db.get_cursor() as cursor:
                 if not allow_negative:
                     cursor.execute(
-                        "SELECT balance FROM users "
-                        "WHERE telegram_id = %s",
+                        "SELECT balance FROM users WHERE telegram_id = %s",
                         (telegram_id,)
                     )
                     result = cursor.fetchone()
                     
                     if not result:
-                        print(
-                            f"No user found with telegram_id "
-                            f"{telegram_id}"
-                        )
                         return False
                     
-                    current_balance = result[0]
-                    new_balance = current_balance + amount
-                    
-                    if new_balance < 0:
-                        print(
-                            f"Insufficient balance for user "
-                            f"{telegram_id}. Current: {current_balance}, "
-                            f"Attempted: {amount}"
-                        )
+                    if result[0] + amount < 0:
                         return False
                 
-                # Update balance
-                query = """
-                    UPDATE users 
-                    SET balance = balance + %s 
-                    WHERE telegram_id = %s
-                """
-                cursor.execute(query, (amount, telegram_id))
-                self.db.connection.commit()
-                
-                rows_affected = cursor.rowcount
-                
-                if rows_affected > 0:
-                    print(
-                        f"Balance updated for user {telegram_id} "
-                        f"by {amount}"
-                    )
-                    return True
-                else:
-                    print(
-                        f"No user found with telegram_id {telegram_id}"
-                    )
-                    return False
-                    
+                cursor.execute(
+                    "UPDATE users SET balance = balance + %s WHERE telegram_id = %s",
+                    (amount, telegram_id)
+                )
+                self._db.connection.commit()
+                return cursor.rowcount > 0
         except Error as e:
-            print(f"Error updating balance: {e}")
+            logger.error("Error updating balance for %s: %s", telegram_id, e)
             return False
     
     def update_lang(self, telegram_id: int, lang: str) -> bool:
         """
-        Update the language preference for a specific user.
+        Update user's language preference.
         
         Parameters:
-        telegram_id (int): The Telegram ID of the user.
-        lang (str): Language code (e.g., 'ru', 'en', 'uz').
-            Must be 2-character ISO language code.
+            telegram_id (int): User's Telegram ID.
+            lang (str): 2-character language code.
         
         Returns:
-        bool: True if update successful, False otherwise.
-        
-        Note:
-        - Returns False if user doesn't exist.
-        - Language code is validated to be exactly 2 characters.
-        - Common codes: 'ru' (Russian), 'en' (English),
-          'uz' (Uzbek), 'kk' (Kazakh).
+            bool: True if updated, False otherwise.
         """
-        if not self.db.is_connected():
-            print("Database not connected")
-            return False
-        
-        # Validate language code format
         if not isinstance(lang, str) or len(lang) != 2:
-            print(
-                f"Invalid language code: {lang}. "
-                f"Must be 2 characters."
-            )
             return False
         
-        try:
-            with self.db.get_cursor() as cursor:
-                query = """
-                    UPDATE users 
-                    SET lang = %s 
-                    WHERE telegram_id = %s
-                """
-                cursor.execute(query, (lang.lower(), telegram_id))
-                self.db.connection.commit()
-                
-                rows_affected = cursor.rowcount
-                
-                if rows_affected > 0:
-                    print(
-                        f"Language updated to '{lang}' "
-                        f"for user {telegram_id}"
-                    )
-                    return True
-                else:
-                    print(
-                        f"No user found with telegram_id {telegram_id}"
-                    )
-                    return False
-        except Error as e:
-            print(f"Error updating language: {e}")
-            return False
+        return self._execute_update(
+            "UPDATE users SET lang = %s WHERE telegram_id = %s",
+            (lang.lower(), telegram_id),
+            f"Error updating language for {telegram_id}"
+        )
     
     def get_user(self, telegram_id: int) -> Optional[Dict[str, Any]]:
         """
         Retrieve user information by telegram_id.
         
         Parameters:
-        telegram_id (int): The Telegram ID of the user.
+            telegram_id (int): User's Telegram ID.
         
         Returns:
-        Optional[Dict[str, Any]]: User data dictionary or None if not
-            found. Dictionary contains: id, telegram_id, lang, balance,
-            last_conversation.
+            Optional[Dict[str, Any]]: User data or None if not found.
         """
-        if not self.db.is_connected():
-            print("Database not connected")
+        if not self._db.ensure_connected():
             return None
         
         try:
-            with self.db.get_cursor() as cursor:
-                query = """
-                    SELECT id, telegram_id, lang, balance, 
-                           last_conversation
-                    FROM users 
-                    WHERE telegram_id = %s
-                """
-                cursor.execute(query, (telegram_id,))
+            with self._db.get_cursor() as cursor:
+                cursor.execute(
+                    """SELECT id, telegram_id, lang, balance, last_conversation
+                       FROM users WHERE telegram_id = %s""",
+                    (telegram_id,)
+                )
                 result = cursor.fetchone()
                 
                 if result:
@@ -376,7 +309,7 @@ class UserRepository:
                     }
                 return None
         except Error as e:
-            print(f"Error retrieving user: {e}")
+            logger.error("Error retrieving user %s: %s", telegram_id, e)
             return None
 
     def update_response_type(
@@ -385,66 +318,42 @@ class UserRepository:
         response_type: str
     ) -> bool:
         """
-        Update the response type preference for a specific user.
+        Update user's response type preference.
 
         Parameters:
-            telegram_id (int): The Telegram ID of the user.
+            telegram_id (int): User's Telegram ID.
             response_type (str): Response type ('base' or 'pro').
 
         Returns:
-            bool: True if update successful, False otherwise.
+            bool: True if updated, False otherwise.
         """
-        if not self.db.is_connected():
-            print("Database not connected")
-            return False
-
         if response_type not in ('base', 'pro'):
-            print(f"Invalid response type: {response_type}")
             return False
 
-        try:
-            with self.db.get_cursor() as cursor:
-                query = """
-                    UPDATE users 
-                    SET response_type = %s 
-                    WHERE telegram_id = %s
-                """
-                cursor.execute(query, (response_type, telegram_id))
-                self.db.connection.commit()
-
-                rows_affected = cursor.rowcount
-
-                if rows_affected > 0:
-                    print(
-                        f"Response type updated to '{response_type}' "
-                        f"for user {telegram_id}"
-                    )
-                    return True
-                else:
-                    print(f"No user found with telegram_id {telegram_id}")
-                    return False
-        except Error as e:
-            print(f"Error updating response type: {e}")
-            return False
+        return self._execute_update(
+            "UPDATE users SET response_type = %s WHERE telegram_id = %s",
+            (response_type, telegram_id),
+            f"Error updating response type for {telegram_id}"
+        )
 
     def get_or_create_user(
         self,
         telegram_id: int,
-        initial_balance: int = 10,
-        lang: str = 'ru',
-        response_type: str = 'base'
+        initial_balance: int = DEFAULT_BALANCE,
+        lang: str = DEFAULT_LANG,
+        response_type: str = DEFAULT_RESPONSE_TYPE
     ) -> Optional[Dict[str, Any]]:
         """
-        Get user by telegram_id or create if not exists.
+        Get existing user or create new one.
 
         Parameters:
-            telegram_id (int): Unique Telegram ID of the user.
+            telegram_id (int): User's Telegram ID.
             initial_balance (int): Initial balance for new user.
-            lang (str): Language preference for new user.
+            lang (str): Language for new user.
             response_type (str): Response type for new user.
 
         Returns:
-            Optional[Dict[str, Any]]: User data dictionary or None.
+            Optional[Dict[str, Any]]: User data or None.
         """
         user = self.get_user(telegram_id)
         if user:
@@ -458,27 +367,25 @@ class UserRepository:
         telegram_id: int
     ) -> Optional[Dict[str, Any]]:
         """
-        Retrieve user information including response_type.
+        Retrieve user with response_type field.
 
         Parameters:
-            telegram_id (int): The Telegram ID of the user.
+            telegram_id (int): User's Telegram ID.
 
         Returns:
             Optional[Dict[str, Any]]: User data with response_type or None.
         """
-        if not self.db.is_connected():
-            print("Database not connected")
+        if not self._db.ensure_connected():
             return None
 
         try:
-            with self.db.get_cursor() as cursor:
-                query = """
-                    SELECT id, telegram_id, lang, response_type, 
-                           balance, last_conversation
-                    FROM users 
-                    WHERE telegram_id = %s
-                """
-                cursor.execute(query, (telegram_id,))
+            with self._db.get_cursor() as cursor:
+                cursor.execute(
+                    """SELECT id, telegram_id, lang, response_type, 
+                              balance, last_conversation
+                       FROM users WHERE telegram_id = %s""",
+                    (telegram_id,)
+                )
                 result = cursor.fetchone()
 
                 if result:
@@ -492,20 +399,20 @@ class UserRepository:
                     }
                 return None
         except Error as e:
-            print(f"Error retrieving user: {e}")
+            logger.error("Error retrieving user %s: %s", telegram_id, e)
             return None
 
 
-# MySQL connection settings
-db_config = {
-    'host': 'localhost',
-    'user': 'root',
-    'password': 'root',
-    'database': 'law_rag_users',
-    'port': 8889
+# Database configuration from environment or defaults
+db_config: Dict[str, Any] = {
+    'host': os.environ.get('DB_HOST', 'localhost'),
+    'user': os.environ.get('DB_USER', 'root'),
+    'password': os.environ.get('DB_PASSWORD', 'root'),
+    'database': os.environ.get('DB_NAME', 'law_rag_users'),
+    'port': int(os.environ.get('DB_PORT', '8889'))
 }
 
-# Initialize database manager and repository
+# Initialize singleton instances
 db_manager = DatabaseManager(db_config)
 db_manager.connect()
 user_repository = UserRepository(db_manager)

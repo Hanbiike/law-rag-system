@@ -1,28 +1,29 @@
 """
 Message and callback handlers for Telegram bot.
 
-This module contains all handlers for processing user messages,
-callbacks, and documents. Uses MySQL database for user data storage.
+This module contains optimized handlers for processing user messages,
+callbacks, and documents with efficient caching and error handling.
 """
 import base64
 import logging
-from typing import Optional
+from functools import lru_cache
+from typing import Final, Optional
 
-from aiogram import Router, F, Bot
-from aiogram.types import Message, CallbackQuery
+from aiogram import Bot, F, Router
 from aiogram.filters import CommandStart
 from aiogram.fsm.context import FSMContext
+from aiogram.types import CallbackQuery, Message
 
 from bot.keyboards import (
     get_language_keyboard,
-    get_response_type_keyboard,
     get_main_reply_keyboard,
+    get_response_type_keyboard,
     get_settings_inline_keyboard
 )
 from bot.messages import (
-    get_message,
+    SETTINGS_BUTTON_KG,
     SETTINGS_BUTTON_RU,
-    SETTINGS_BUTTON_KG
+    get_message
 )
 from bot.states import UserState
 from databases.db import user_repository
@@ -34,21 +35,41 @@ logger = logging.getLogger(__name__)
 # Create router
 router = Router()
 
-# Initialize searcher
-searcher = ProLawRAGSearch(top_k=3, n_llm_questions=10)
+# Singleton searcher instance - lazy initialization
+_searcher: Optional[ProLawRAGSearch] = None
 
-# Maximum document size (20 MB)
-MAX_DOC_SIZE = 20 * 1024 * 1024
+# Constants for configuration
+MAX_DOC_SIZE: Final[int] = 20 * 1024 * 1024  # 20 MB
+MAX_MESSAGE_LENGTH: Final[int] = 4096
+COST_BASE: Final[int] = 1
+COST_PRO: Final[int] = 2
+COST_DOCUMENT: Final[int] = 3
 
-# Cost per query type
-COST_BASE = 1      # Base text query cost
-COST_PRO = 2       # Pro text query cost
-COST_DOCUMENT = 3  # Document query cost
+# Settings buttons set for quick lookup
+SETTINGS_BUTTONS: Final[frozenset] = frozenset({SETTINGS_BUTTON_RU, SETTINGS_BUTTON_KG})
 
 
+def get_searcher() -> ProLawRAGSearch:
+    """
+    Get or create singleton searcher instance.
+    
+    Lazy initialization to avoid loading model at import time.
+    
+    Returns:
+        ProLawRAGSearch: Singleton searcher instance.
+    """
+    global _searcher
+    if _searcher is None:
+        _searcher = ProLawRAGSearch(top_k=3, n_llm_questions=10)
+    return _searcher
+
+
+@lru_cache(maxsize=64)
 def get_query_cost(response_type: str, is_document: bool = False) -> int:
     """
     Calculate query cost based on type.
+    
+    Cached for performance on repeated calls.
 
     Parameters:
         response_type (str): Response type ('base' or 'pro').
@@ -59,9 +80,7 @@ def get_query_cost(response_type: str, is_document: bool = False) -> int:
     """
     if is_document:
         return COST_DOCUMENT
-    if response_type == 'pro':
-        return COST_PRO
-    return COST_BASE
+    return COST_PRO if response_type == 'pro' else COST_BASE
 
 
 def get_user_data(telegram_id: int) -> Optional[dict]:
@@ -89,7 +108,6 @@ def ensure_user_exists(telegram_id: int) -> dict:
     """
     user = user_repository.get_or_create_user(telegram_id)
     if user:
-        # Get full user data with response_type
         return user_repository.get_user_with_response_type(telegram_id) or user
     return {'lang': 'ru', 'response_type': 'base', 'balance': 10}
 
@@ -293,8 +311,8 @@ async def process_text_query(message: Message, state: FSMContext) -> None:
         message (Message): Incoming message object.
         state (FSMContext): FSM context for state management.
     """
-    # Skip settings button (handled by separate handler)
-    if message.text in [SETTINGS_BUTTON_RU, SETTINGS_BUTTON_KG]:
+    # Skip settings button
+    if message.text in SETTINGS_BUTTONS:
         return
 
     telegram_id = message.from_user.id
@@ -307,10 +325,8 @@ async def process_text_query(message: Message, state: FSMContext) -> None:
     response_type = user.get('response_type', 'base')
     balance = user.get('balance', 0)
 
-    # Calculate query cost based on type
     query_cost = get_query_cost(response_type, is_document=False)
 
-    # Check balance
     if balance < query_cost:
         await message.answer(
             get_message('insufficient_balance', lang, balance=balance),
@@ -318,33 +334,26 @@ async def process_text_query(message: Message, state: FSMContext) -> None:
         )
         return
 
-    # Send processing message
     processing_msg = await message.answer(get_message('processing', lang))
 
     try:
-        # Deduct balance
         user_repository.update_balance(telegram_id, -query_cost)
 
-        # Get response from RAG system
-        response = await get_rag_response(
+        response = await get_searcher().get_response_text(
             query=message.text,
-            response_type=response_type,
+            type=response_type,
             lang=lang
         )
 
         if response:
-            # Delete processing message
             await processing_msg.delete()
-            # Send response (split if too long)
             await send_long_message(message, response, lang)
         else:
-            # Refund balance on failure
             user_repository.update_balance(telegram_id, query_cost)
             await processing_msg.edit_text(get_message('no_response', lang))
 
     except Exception as e:
-        logger.error(f"Error processing text query: {e}")
-        # Refund balance on error
+        logger.error("Error processing text query: %s", e)
         user_repository.update_balance(telegram_id, query_cost)
         await processing_msg.edit_text(get_message('error', lang))
 
@@ -377,50 +386,37 @@ async def process_document(
 
     document = message.document
 
-    # Check file size
     if document.file_size > MAX_DOC_SIZE:
         await message.answer(get_message('doc_too_large', lang))
         return
 
-    # Check file format (only PDF supported)
     if document.mime_type != 'application/pdf':
         await message.answer(get_message('unsupported_format', lang))
         return
 
-    # Document query cost
-    query_cost = COST_DOCUMENT
-
-    # Check balance
-    if balance < query_cost:
+    if balance < COST_DOCUMENT:
         await message.answer(
             get_message('insufficient_balance', lang, balance=balance),
             parse_mode="Markdown"
         )
         return
 
-    # Send processing message
     processing_msg = await message.answer(get_message('processing_doc', lang))
 
     try:
-        # Deduct balance
-        user_repository.update_balance(telegram_id, -query_cost)
+        user_repository.update_balance(telegram_id, -COST_DOCUMENT)
 
-        # Download file
         file = await bot.get_file(document.file_id)
         file_data = await bot.download_file(file.file_path)
-
-        # Convert to base64
         file_bytes = file_data.read()
         document_base64 = base64.b64encode(file_bytes).decode('utf-8')
 
-        # Get query from caption or default
         query = message.caption or get_default_doc_query(lang)
 
-        # Get response from RAG system
-        response = await get_rag_response_from_doc(
+        response = await get_searcher().get_response_from_doc_text(
             query=query,
             document_base64=document_base64,
-            response_type=response_type,
+            type=response_type,
             lang=lang
         )
 
@@ -428,14 +424,12 @@ async def process_document(
             await processing_msg.delete()
             await send_long_message(message, response, lang)
         else:
-            # Refund balance on failure
-            user_repository.update_balance(telegram_id, query_cost)
+            user_repository.update_balance(telegram_id, COST_DOCUMENT)
             await processing_msg.edit_text(get_message('no_response', lang))
 
     except Exception as e:
-        logger.error(f"Error processing document: {e}")
-        # Refund balance on error
-        user_repository.update_balance(telegram_id, query_cost)
+        logger.error("Error processing document: %s", e)
+        user_repository.update_balance(telegram_id, COST_DOCUMENT)
         await processing_msg.edit_text(get_message('error', lang))
 
 
@@ -482,8 +476,7 @@ async def process_text_without_state(
         message (Message): Incoming message object.
         state (FSMContext): FSM context for state management.
     """
-    # Handle settings button
-    if message.text in [SETTINGS_BUTTON_RU, SETTINGS_BUTTON_KG]:
+    if message.text in SETTINGS_BUTTONS:
         await process_settings_button(message, state)
         return
 
@@ -491,11 +484,9 @@ async def process_text_without_state(
     user = get_user_data(telegram_id)
 
     if user:
-        # User exists, set ready state and process
         await state.set_state(UserState.ready)
         await process_text_query(message, state)
     else:
-        # New user, start onboarding
         await state.set_state(UserState.selecting_language)
         await message.answer(
             get_message('welcome', 'ru'),
@@ -531,68 +522,12 @@ async def process_document_without_state(
         )
 
 
-async def get_rag_response(
-    query: str,
-    response_type: str,
-    lang: str
-) -> Optional[str]:
-    """
-    Get response from RAG system for text query.
-
-    Parameters:
-        query (str): User's text query.
-        response_type (str): Response type ('base' or 'pro').
-        lang (str): Language code ('ru' or 'kg').
-
-    Returns:
-        Optional[str]: Response text or None if error.
-    """
-    try:
-        response = await searcher.get_response_text(
-            query=query,
-            type=response_type,
-            lang=lang
-        )
-        return response
-    except Exception as e:
-        logger.error(f"RAG response error: {e}")
-        return None
-
-
-async def get_rag_response_from_doc(
-    query: str,
-    document_base64: str,
-    response_type: str,
-    lang: str
-) -> Optional[str]:
-    """
-    Get response from RAG system for document query.
-
-    Parameters:
-        query (str): User's text query about the document.
-        document_base64 (str): Base64 encoded document.
-        response_type (str): Response type ('base' or 'pro').
-        lang (str): Language code ('ru' or 'kg').
-
-    Returns:
-        Optional[str]: Response text or None if error.
-    """
-    try:
-        response = await searcher.get_response_from_doc_text(
-            query=query,
-            document_base64=document_base64,
-            type=response_type,
-            lang=lang
-        )
-        return response
-    except Exception as e:
-        logger.error(f"RAG document response error: {e}")
-        return None
-
-
+@lru_cache(maxsize=4)
 def get_default_doc_query(lang: str) -> str:
     """
     Get default query for document analysis.
+    
+    Cached for performance.
 
     Parameters:
         lang (str): Language code ('ru' or 'kg').
@@ -612,7 +547,7 @@ async def send_long_message(
     message: Message,
     text: str,
     lang: str,
-    max_length: int = 4096
+    max_length: int = MAX_MESSAGE_LENGTH
 ) -> None:
     """
     Send long message by splitting into chunks if needed.
@@ -624,15 +559,10 @@ async def send_long_message(
         max_length (int): Maximum message length (Telegram limit).
     """
     if len(text) <= max_length:
-        await message.answer(
-            text,
-            parse_mode="Markdown"
-        )
-    else:
-        # Split message into chunks
-        chunks = [
-            text[i:i + max_length]
-            for i in range(0, len(text), max_length)
-        ]
-        for chunk in chunks:
-            await message.answer(chunk, parse_mode="Markdown")
+        await message.answer(text, parse_mode="Markdown")
+        return
+    
+    # Split message into chunks
+    for i in range(0, len(text), max_length):
+        chunk = text[i:i + max_length]
+        await message.answer(chunk, parse_mode="Markdown")

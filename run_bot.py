@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Entry point for running the Telegram bot.
 

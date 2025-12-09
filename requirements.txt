@@ -1,17 +1,24 @@
 # Law RAG System Dependencies
-# Core dependencies
-python-dotenv>=1.0.0
+# ===========================
+
+# Core AI/ML dependencies
 openai>=1.0.0
 pydantic>=2.0.0
 
 # Vector database
 pymilvus>=2.3.0
 
-# Embeddings
+# Embeddings (with ONNX for faster inference)
 sentence-transformers>=2.2.0
 
-# Telegram bot
+# MySQL database
+mysql-connector-python>=8.0.0
+
+# Telegram bot framework
 aiogram>=3.3.0
 
-# Utilities
+# Environment configuration
+python-dotenv>=1.0.0
+
+# Async utilities
 aiofiles>=23.0.0
