@@ -1,54 +1,56 @@
 # Law RAG System
 
-Высокопроизводительная система Retrieval-Augmented Generation (RAG) для поиска по законодательству Кыргызской Республики с интеграцией Telegram-бота.
+[🇷🇺 Русская версия](README.ru.md)
 
-## ✨ Особенности
+A high-performance Retrieval-Augmented Generation (RAG) system for searching legislation of the Kyrgyz Republic with Telegram bot integration.
 
-- **🔍 Семантический поиск** по юридическим документам с использованием векторных эмбеддингов
-- **🤖 Telegram-бот** для удобного взаимодействия с системой
-- **📊 Три режима ответа**: 
-  - **Базовый** (1 запрос) — быстрый поиск + LLM ответ
-  - **Продвинутый** (2 запроса) — расширенный анализ с уточняющими вопросами
-  - **Поиск** (1 запрос) — только релевантные статьи без LLM
-- **🌐 Поддержка двух языков**: русский и кыргызский
-- **📄 Анализ документов** с извлечением структурированных данных:
-  - PDF файлы через URL (без base64)
-  - Изображения/скриншоты документов
-- **⚡ Оптимизированная производительность**: singleton-паттерны, LRU-кэширование, lazy-loading
-- **💾 MySQL + Milvus**: хранение пользовательских данных и векторный поиск
+## ✨ Features
 
-## 🏗 Архитектура проекта
+- **🔍 Semantic search** through legal documents using vector embeddings
+- **🤖 Telegram bot** for convenient system interaction
+- **📊 Three response modes**:
+  - **Basic** (1 request) — fast search + LLM answer
+  - **Advanced** (2 requests) — extended analysis with clarifying questions
+  - **Search** (1 request) — only relevant articles without LLM
+- **🌐 Bilingual support**: Russian and Kyrgyz
+- **📄 Document analysis** with structured data extraction:
+  - PDF files via URL (no base64)
+  - Images/screenshots of documents
+- **⚡ Optimized performance**: singleton patterns, LRU caching, lazy-loading
+- **💾 MySQL + Milvus**: user data storage and vector search
+
+## 🏗 Project Architecture
 
 ```
 law-rag-system/
-├── aitools/                      # AI инструменты
-│   ├── embedder.py              # Singleton-эмбеддер с кэшированием
-│   └── llm.py                   # Azure OpenAI клиент (responses API)
-├── bot/                          # Telegram-бот
-│   ├── bot.py                   # Инициализация и запуск бота
-│   ├── handlers.py              # Обработчики сообщений
-│   ├── keyboards.py             # Кэшированные клавиатуры
-│   ├── messages.py              # Локализованные сообщения
-│   └── states.py                # FSM состояния
-├── confs/                        # Конфигурация
-│   └── config.py                # Переменные окружения + кэшированные промпты
-├── databases/                    # Работа с БД
-│   ├── db.py                    # MySQL (пользователи, баланс)
-│   ├── milvus_db.py             # Milvus (векторный поиск)
-│   └── init.sql                 # SQL схема
-├── searchers/                    # Логика поиска
+├── aitools/                      # AI tools
+│   ├── embedder.py              # Singleton embedder with caching
+│   └── llm.py                   # Azure OpenAI client (responses API)
+├── bot/                          # Telegram bot
+│   ├── bot.py                   # Bot initialization and launch
+│   ├── handlers.py              # Message handlers
+│   ├── keyboards.py             # Cached keyboards
+│   ├── messages.py              # Localized messages
+│   └── states.py                # FSM states
+├── confs/                        # Configuration
+│   └── config.py                # Environment variables + cached prompts
+├── databases/                    # Database operations
+│   ├── db.py                    # MySQL (users, balance)
+│   ├── milvus_db.py             # Milvus (vector search)
+│   └── init.sql                 # SQL schema
+├── searchers/                    # Search logic
 │   └── search.py                # ProLawRAGSearch (RAG pipeline)
-├── main.py                       # CLI точка входа
-├── run_bot.py                    # Запуск Telegram-бота
-├── law_rag_db.json              # База законов (RU)
-├── law_rag_db_kg.json           # База законов (KG)
-├── requirements.txt              # Зависимости
-└── .env                          # Переменные окружения
+├── main.py                       # CLI entry point
+├── run_bot.py                    # Telegram bot launcher
+├── law_rag_db.json              # Law database (RU)
+├── law_rag_db_kg.json           # Law database (KG)
+├── requirements.txt              # Dependencies
+└── .env                          # Environment variables
 ```
 
-## 🚀 Быстрый старт
+## 🚀 Quick Start
 
-### 1. Клонирование и настройка
+### 1. Clone and Setup
 
 ```bash
 git clone https://github.com/Hanbiike/law-rag-system.git
@@ -58,10 +60,10 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Настройка `.env`
+### 2. Configure `.env`
 
 ```env
-# Azure OpenAI Nano (используется для всех запросов)
+# Azure OpenAI Nano (used for all requests)
 AZURE_ENDPOINT_NANO=https://your-endpoint.openai.azure.com/
 AZURE_OPENAI_API_KEY_NANO=your_api_key
 AZURE_DEPLOYMENT_NANO=your_deployment_name
@@ -70,7 +72,7 @@ AZURE_API_VERSION_NANO=2025-03-01-preview
 # Telegram Bot
 TELEGRAM_BOT_TOKEN=your_bot_token
 
-# MySQL (опционально, по умолчанию localhost)
+# MySQL (optional, defaults to localhost)
 DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=root
@@ -78,143 +80,143 @@ DB_NAME=law_rag_users
 DB_PORT=8889
 ```
 
-### 3. Запуск
+### 3. Launch
 
-**Telegram-бот:**
+**Telegram bot:**
 ```bash
 python run_bot.py
 ```
 
-**CLI тестирование:**
+**CLI testing:**
 ```bash
 python main.py
 ```
-## 📖 Использование
 
-### Telegram-бот
+## 📖 Usage
 
-После запуска бота пользователи могут:
-1. Выбрать язык интерфейса (🇷🇺 Русский / 🇰🇬 Кыргызча)
-2. Выбрать режим ответа:
-   - **📝 Базовый** — поиск + LLM ответ
-   - **⚡ Продвинутый** — расширенный анализ с генерацией вопросов
-   - **🔍 Поиск** — только релевантные статьи
-3. Отправлять текстовые вопросы о законодательстве
-4. Загружать PDF документы для анализа
-5. Отправлять изображения/скриншоты документов
+### Telegram Bot
 
-**Стоимость запросов:**
-- **Текстовые запросы:**
-  - Базовый режим: 1 запрос
-  - Продвинутый режим: 2 запроса
-  - Режим поиска: 1 запрос
-- **Документы/изображения:**
-  - Базовый режим: 3 запроса
-  - Продвинутый режим: 9 запросов
+After launching the bot, users can:
+1. Choose interface language (🇷🇺 Russian / 🇰🇬 Kyrgyz)
+2. Select response mode:
+   - **📝 Basic** — search + LLM answer
+   - **⚡ Advanced** — extended analysis with question generation
+   - **🔍 Search** — only relevant articles
+3. Send text questions about legislation
+4. Upload PDF documents for analysis
+5. Send images/screenshots of documents
 
-### Программный API
+**Request costs:**
+- **Text queries:**
+  - Basic mode: 1 request
+  - Advanced mode: 2 requests
+  - Search mode: 1 request
+- **Documents/images:**
+  - Basic mode: 3 requests
+  - Advanced mode: 9 requests
+
+### Programmatic API
 
 ```python
 from searchers.search import ProLawRAGSearch
 import asyncio
 
-# Создание экземпляра (singleton-компоненты переиспользуются)
+# Create instance (singleton components are reused)
 searcher = ProLawRAGSearch(top_k=3, n_llm_questions=3)
 
-# Текстовый запрос
+# Text query
 response = asyncio.run(searcher.get_response_text(
-    query="Какие права имеет работник при увольнении?",
-    type='pro',     # 'base', 'pro', или 'search'
-    lang='ru'       # 'ru' или 'kg'
+    query="What rights does an employee have upon dismissal?",
+    type='pro',     # 'base', 'pro', or 'search'
+    lang='ru'       # 'ru' or 'kg'
 ))
 
-# Анализ PDF документа (через URL)
+# Analyze PDF document (via URL)
 file_url = "https://api.telegram.org/file/bot<TOKEN>/<file_path>"
 response = asyncio.run(searcher.get_response_from_doc_text(
-    query="Законен ли данный документ?",
+    query="Is this document legal?",
     file_url=file_url,
     type='pro',
     lang='ru'
 ))
 
-# Анализ изображения документа
+# Analyze document image
 image_url = "https://api.telegram.org/file/bot<TOKEN>/<file_path>"
 response = asyncio.run(searcher.get_response_from_image_text(
-    query="Проанализируй этот документ",
+    query="Analyze this document",
     image_url=image_url,
     type='base',
     lang='ru'
 ))
-
 ```
 
-## ⚡ Оптимизации производительности
+## ⚡ Performance Optimizations
 
-### Singleton-паттерны
-- `QueryEmbedder` — модель эмбеддингов загружается один раз
-- `LLMHelper` — Azure OpenAI клиент переиспользуется
-- `MilvusLawSearcher` — соединение с БД переиспользуется
+### Singleton Patterns
+- `QueryEmbedder` — embedding model loaded once
+- `LLMHelper` — Azure OpenAI client reused
+- `MilvusLawSearcher` — database connection reused
 
-### LRU-кэширование
-- Промпты для генерации вопросов (`@lru_cache`)
-- Клавиатуры Telegram-бота
-- Расчёт стоимости запросов
+### LRU Caching
+- Question generation prompts (`@lru_cache`)
+- Telegram bot keyboards
+- Request cost calculation
 
-### Оптимизация токенов
-- Сжатые промпты без лишних пробелов
-- Системные инструкции вынесены в константы
-- Дедупликация результатов поиска
-- **Pro режим для документов**: глубокий анализ с расширенным контекстом (до 10×3×3=90 статей)
+### Token Optimization
+- Compressed prompts without extra spaces
+- System instructions extracted to constants
+- Search results deduplication
+- **Pro mode for documents**: deep analysis with extended context (up to 10×3×3=90 articles)
 
-### Lazy-loading
-- Telegram-бот: searcher инициализируется при первом запросе
-- Embedder: модель загружается при первом использовании
+### Lazy-Loading
+- Telegram bot: searcher initialized on first request
+- Embedder: model loaded on first use
 
-## 🔧 Компоненты системы
+## 🔧 System Components
 
-### AI инструменты (`aitools/`)
+### AI Tools (`aitools/`)
 
-| Модуль | Описание |
-|--------|----------|
-| `embedder.py` | Singleton-эмбеддер на базе `google/embeddinggemma-300m`, кэширование, batch processing |
-| `llm.py` | Azure OpenAI клиент с responses API (`responses.parse`, `responses.create`). Поддержка файлов/изображений через URL |
+| Module | Description |
+|--------|-------------|
+| `embedder.py` | Singleton embedder based on `google/embeddinggemma-300m`, caching, batch processing |
+| `llm.py` | Azure OpenAI client with responses API (`responses.parse`, `responses.create`). File/image support via URL |
 
-### Telegram-бот (`bot/`)
+### Telegram Bot (`bot/`)
 
-| Модуль | Описание |
-|--------|----------|
-| `bot.py` | Инициализация aiogram, polling |
-| `handlers.py` | Обработчики команд, текста, документов (PDF), изображений |
-| `keyboards.py` | Кэшированные inline/reply клавиатуры (3 режима ответа) |
-| `messages.py` | Локализованные сообщения (RU/KG) |
-| `states.py` | FSM состояния пользователя |
+| Module | Description |
+|--------|-------------|
+| `bot.py` | Aiogram initialization, polling |
+| `handlers.py` | Command, text, document (PDF), and image handlers |
+| `keyboards.py` | Cached inline/reply keyboards (3 response modes) |
+| `messages.py` | Localized messages (RU/KG) |
+| `states.py` | User FSM states |
 
-### Базы данных (`databases/`)
+### Databases (`databases/`)
 
-| Модуль | Описание |
-|--------|----------|
-| `db.py` | MySQL: пользователи, баланс, настройки |
-| `milvus_db.py` | Milvus: векторный поиск с дедупликацией |
+| Module | Description |
+|--------|-------------|
+| `db.py` | MySQL: users, balance, settings |
+| `milvus_db.py` | Milvus: vector search with deduplication |
 
-## 🛠 Технические детали
+## 🛠 Technical Details
 
-### Процесс RAG-поиска
+### RAG Search Process
 
-#### Текстовые запросы
+#### Text Queries
 
 ```mermaid
 flowchart TD
-    A[Запрос пользователя] --> B{Режим?}
-    B -->|pro| C[LLM генерирует<br/>уточняющие вопросы]
-    B -->|base/search| D[Прямая векторизация]
-    C --> E[QueryEmbedder<br/>векторизация]
+    A[User Query] --> B{Mode?}
+    B -->|pro| C[LLM generates<br/>clarifying questions]
+    B -->|base/search| D[Direct vectorization]
+    C --> E[QueryEmbedder<br/>vectorization]
     D --> E
-    E --> F[Milvus поиск<br/>COSINE similarity]
-    F --> G[Дедупликация<br/>результатов]
-    G --> H{Режим?}
-    H -->|search| I[Форматирование<br/>статей]
-    H -->|base/pro| J[LLM генерация<br/>ответа с контекстом]
-    I --> K[Ответ пользователю]
+    E --> F[Milvus search<br/>COSINE similarity]
+    F --> G[Results<br/>deduplication]
+    G --> H{Mode?}
+    H -->|search| I[Format<br/>articles]
+    H -->|base/pro| J[LLM generates<br/>answer with context]
+    I --> K[Response to user]
     J --> K
     
     style A fill:#e1f5ff
@@ -223,26 +225,26 @@ flowchart TD
     style J fill:#fff9c4
 ```
 
-#### Документы/изображения
+#### Documents/Images
 
 ```mermaid
 flowchart TD
-    A[Документ/Изображение URL] --> B[LLM извлечение<br/>параграфов]
-    B --> C{Режим?}
+    A[Document/Image URL] --> B[LLM extracts<br/>paragraphs]
+    B --> C{Mode?}
     
-    C -->|base| D1[Векторизация<br/>каждого параграфа]
-    D1 --> D2[Поиск top_k<br/>для каждого]
-    D2 --> D3[Контекст:<br/>paragraphs × top_k]
+    C -->|base| D1[Vectorize<br/>each paragraph]
+    D1 --> D2[Search top_k<br/>for each]
+    D2 --> D3[Context:<br/>paragraphs × top_k]
     
-    C -->|pro| E1[Для КАЖДОГО параграфа]
-    E1 --> E2[Генерация n вопросов]
-    E2 --> E3[Поиск top_k<br/>для каждого вопроса]
-    E3 --> E4[Контекст:<br/>paragraphs × n × top_k]
+    C -->|pro| E1[For EACH paragraph]
+    E1 --> E2[Generate n questions]
+    E2 --> E3[Search top_k<br/>for each question]
+    E3 --> E4[Context:<br/>paragraphs × n × top_k]
     
-    D3 --> F[Дедупликация<br/>результатов]
+    D3 --> F[Results<br/>deduplication]
     E4 --> F
-    F --> G[LLM генерирует<br/>финальный ответ]
-    G --> H[Ответ пользователю]
+    F --> G[LLM generates<br/>final answer]
+    G --> H[Response to user]
     
     style A fill:#e1f5ff
     style H fill:#c8e6c9
@@ -252,92 +254,105 @@ flowchart TD
     style E4 fill:#ffccbc
 ```
 
-### Структура данных Milvus
+### Milvus Data Structure
 
 ```
 law_collection / law_collection_kg
-├── source_doc     — название закона
-├── section        — раздел
-├── chapter        — глава
-├── article_title  — название статьи
-├── article_text   — текст статьи
-└── vector         — эмбеддинг (1024 dim)
+├── source_doc     — law name
+├── section        — section
+├── chapter        — chapter
+├── article_title  — article title
+├── article_text   — article text
+└── vector         — embedding (1024 dim)
 ```
 
-
-
-## 📦 Зависимости
+## 📦 Dependencies
 
 ```
 openai>=1.0.0           # Azure OpenAI SDK (responses API)
-pydantic>=2.0.0         # Валидация данных
-pymilvus>=2.3.0         # Векторная БД
-sentence-transformers   # Эмбеддинги
+pydantic>=2.0.0         # Data validation
+pymilvus>=2.3.0         # Vector database
+sentence-transformers   # Embeddings
 mysql-connector-python  # MySQL
-aiogram>=3.3.0          # Telegram-бот
-python-dotenv           # Переменные окружения
-aiofiles                # Async файловые операции
+aiogram>=3.3.0          # Telegram bot
+python-dotenv           # Environment variables
+aiofiles                # Async file operations
 ```
 
-## 🐛 Устранение неполадок
+## 🐛 Troubleshooting
 
-| Проблема | Решение |
-|----------|---------|
-| `Error calling LLM` | Проверьте `.env`, убедитесь что деплой Azure активен |
-| `Milvus connection error` | Проверьте наличие `milvus_law_rag.db` |
-| `CUDA out of memory` | Модель автоматически переключится на CPU |
-| Низкое качество | Увеличьте `top_k`, используйте режим `pro` |
-| Режим не сохраняется | Проверьте, что БД поддерживает `'search'` в `response_type` |
+| Problem | Solution |
+|---------|----------|
+| `Error calling LLM` | Check `.env`, ensure Azure deployment is active |
+| `Milvus connection error` | Verify `milvus_law_rag.db` exists |
+| `CUDA out of memory` | Model automatically switches to CPU |
+| Low quality | Increase `top_k`, use `pro` mode |
+| Mode not saving | Check that DB supports `'search'` in `response_type` |
 
-## 📊 Производительность
+## 📊 Performance
 
-| Операция | Время |
-|----------|-------|
-| Эмбеддинг запроса | ~0.1-0.3 сек |
-| Поиск в Milvus | ~0.01-0.05 сек |
-| Генерация ответа LLM | ~1-3 сек |
-| Режим 'search' | ~0.2-0.5 сек |
-| Полный цикл (base) | ~2-4 сек |
-| Полный цикл (pro) | ~4-7 сек |
-| **Документ base** | ~5-10 сек |
-| **Документ pro** | ~15-30 сек (глубокий анализ) |
+| Operation | Time |
+|-----------|------|
+| Query embedding | ~0.1-0.3 sec |
+| Milvus search | ~0.01-0.05 sec |
+| LLM answer generation | ~1-3 sec |
+| 'search' mode | ~0.2-0.5 sec |
+| Full cycle (base) | ~2-4 sec |
+| Full cycle (pro) | ~4-7 sec |
+| **Document base** | ~5-10 sec |
+| **Document pro** | ~15-30 sec (deep analysis) |
 
-## 🔒 Безопасность
+## 🔒 Security
 
-- ⚠️ Никогда не коммитьте `.env` в git
-- Используйте ротацию API-ключей
-- Конфигурация БД через переменные окружения
-- Валидация размера документов:
-  - PDF: макс. 20 МБ
-  - Изображения: макс. 10 МБ
-- Поддерживаемые форматы: PDF, JPEG, PNG, GIF, WebP
+- ⚠️ Never commit `.env` to git
+- Use API key rotation
+- Database configuration via environment variables
+- Document size validation:
+  - PDF: max 20 MB
+  - Images: max 10 MB
+- Supported formats: PDF, JPEG, PNG, GIF, WebP
 
 ## 🗺 Roadmap
 
-- [x] Telegram-бот с FSM
-- [x] Три режима ответа (base, pro, search)
-- [x] Поддержка изображений/скриншотов
-- [x] Работа с файлами через URL (без base64)
-- [x] Singleton-оптимизации
-- [x] LRU-кэширование
-- [x] Дедупликация результатов
-- [ ] Redis для кэширования ответов
-- [ ] Web интерфейс (FastAPI)
-- [ ] Поддержка DOCX документов
-- [ ] A/B тестирование моделей
-- [ ] Статистика использования режимов
+- [x] Telegram bot with FSM
+- [x] Three response modes (base, pro, search)
+- [x] Image/screenshot support
+- [x] File handling via URL (no base64)
+- [x] Singleton optimizations
+- [x] LRU caching
+- [x] Results deduplication
+- [ ] Redis for response caching
+- [ ] Web interface (FastAPI)
+- [ ] DOCX document support
+- [ ] A/B testing of models
+- [ ] Usage statistics for modes
 
-## 📄 Лицензия
+## 📄 License
 
-MIT License
+GNU General Public License v3.0 (GPL-3.0)
 
-## 👤 Автор
+This is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License version 3 as published by the Free Software Foundation.
+
+Key terms:
+- ✅ Commercial use
+- ✅ Modification
+- ✅ Distribution
+- ✅ Patent use
+- ✅ Private use
+- ❗ Disclose source (copyleft)
+- ❗ License and copyright notice
+- ❗ State changes
+- ❗ Same license
+
+See [LICENSE](LICENSE) for the full license text.
+
+## 👤 Author
 
 **Askat Rakhymbekov** ([@Hanbiike](https://github.com/Hanbiike))
 
-## 🙏 Благодарности
+## 🙏 Acknowledgments
 
-- Azure OpenAI — LLM модели
-- Milvus — векторная база данных
-- SentenceTransformers — эмбеддинги
-- aiogram — Telegram-бот фреймворк
+- Azure OpenAI — LLM models
+- Milvus — vector database
+- SentenceTransformers — embeddings
+- aiogram — Telegram bot framework
