@@ -431,7 +431,7 @@ aiofiles                # Async file operations
 Automated pipeline for monitoring and updating the legal database:
 
 ```mermaid
-flowchart LR
+flowchart TD
     A[Scheduled Check<br/>Daily at 02:00] --> B{New Laws<br/>Available?}
     
     B -->|No| C[Skip Update]
