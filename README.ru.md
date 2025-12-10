@@ -88,7 +88,64 @@ DB_NAME=law_rag_users
 DB_PORT=8889
 ```
 
-### 3. Запуск
+### 3. Настройка MySQL
+
+**Установка MySQL:**
+
+```bash
+# macOS
+brew install mysql
+brew services start mysql
+
+# Ubuntu/Debian
+sudo apt update
+sudo apt install mysql-server
+sudo systemctl start mysql
+
+# Windows
+# Скачайте и установите с https://dev.mysql.com/downloads/mysql/
+```
+
+**Создание базы данных и пользователя:**
+
+```bash
+# Подключение к MySQL
+mysql -u root -p
+```
+
+```sql
+-- Создание базы данных
+CREATE DATABASE law_rag_users CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Создание пользователя (измените пароль)
+CREATE USER 'law_rag_user'@'localhost' IDENTIFIED BY 'ваш_надежный_пароль';
+
+-- Предоставление прав
+GRANT ALL PRIVILEGES ON law_rag_users.* TO 'law_rag_user'@'localhost';
+FLUSH PRIVILEGES;
+
+-- Выход
+EXIT;
+```
+
+**Инициализация схемы:**
+
+```bash
+# Импорт схемы базы данных
+mysql -u law_rag_user -p law_rag_users < databases/init.sql
+```
+
+**Обновите `.env` вашими данными:**
+
+```env
+DB_HOST=localhost
+DB_USER=law_rag_user
+DB_PASSWORD=ваш_надежный_пароль
+DB_NAME=law_rag_users
+DB_PORT=3306
+```
+
+### 4. Запуск
 
 **Telegram-бот:**
 ```bash

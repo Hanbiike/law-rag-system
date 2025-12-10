@@ -88,7 +88,64 @@ DB_NAME=law_rag_users
 DB_PORT=8889
 ```
 
-### 3. Launch
+### 3. Setup MySQL Database
+
+**Install MySQL:**
+
+```bash
+# macOS
+brew install mysql
+brew services start mysql
+
+# Ubuntu/Debian
+sudo apt update
+sudo apt install mysql-server
+sudo systemctl start mysql
+
+# Windows
+# Download and install from https://dev.mysql.com/downloads/mysql/
+```
+
+**Create Database and User:**
+
+```bash
+# Connect to MySQL
+mysql -u root -p
+```
+
+```sql
+-- Create database
+CREATE DATABASE law_rag_users CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Create user (change password)
+CREATE USER 'law_rag_user'@'localhost' IDENTIFIED BY 'your_secure_password';
+
+-- Grant privileges
+GRANT ALL PRIVILEGES ON law_rag_users.* TO 'law_rag_user'@'localhost';
+FLUSH PRIVILEGES;
+
+-- Exit
+EXIT;
+```
+
+**Initialize Schema:**
+
+```bash
+# Import database schema
+mysql -u law_rag_user -p law_rag_users < databases/init.sql
+```
+
+**Update `.env` with your credentials:**
+
+```env
+DB_HOST=localhost
+DB_USER=law_rag_user
+DB_PASSWORD=your_secure_password
+DB_NAME=law_rag_users
+DB_PORT=3306
+```
+
+### 4. Launch
 
 **Telegram bot:**
 ```bash
