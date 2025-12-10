@@ -37,7 +37,15 @@ law-rag-system/
 ├── databases/                    # Database operations
 │   ├── db.py                    # MySQL (users, balance)
 │   ├── milvus_db.py             # Milvus (vector search)
+│   ├── milvus_init.py           # Milvus initialization
 │   └── init.sql                 # SQL schema
+├── parser/                       # Document parsing (OOP)
+│   ├── document_parser.py       # DocumentParser (RU/KG support)
+│   ├── vectorizer.py            # Vectorizer (embeddings)
+│   ├── milvus_loader.py         # MilvusLoader (data loading)
+│   ├── pipeline.py              # ParserPipeline (full workflow)
+│   ├── docx/                    # Russian DOCX files
+│   └── docx_kg/                 # Kyrgyz DOCX files
 ├── searchers/                    # Search logic
 │   └── search.py                # ProLawRAGSearch (RAG pipeline)
 ├── main.py                       # CLI entry point
@@ -172,6 +180,100 @@ response = asyncio.run(searcher.get_response_from_image_text(
 - Telegram bot: searcher initialized on first request
 - Embedder: model loaded on first use
 
+## 📚 Document Parsing & Database Setup
+
+### Parser Pipeline
+
+The system includes a complete OOP-based pipeline for processing legal documents:
+
+```mermaid
+flowchart TD
+    A[DOCX Files<br/>Russian/Kyrgyz] --> B[DocumentParser]
+    B --> C{Language?}
+    
+    C -->|Russian| D1[Parse with<br/>Russian patterns]
+    C -->|Kyrgyz| D2[Parse with<br/>Kyrgyz patterns]
+    
+    D1 --> E[Extract Articles<br/>+ Section/Chapter]
+    D2 --> E
+    
+    E --> F[Article Objects<br/>List]
+    F --> G[Vectorizer]
+    
+    G --> H[SentenceTransformer<br/>Batch Encoding]
+    H --> I[VectorizedArticle<br/>Objects]
+    
+    I --> J{Save JSON?}
+    J -->|Yes| K[Save to<br/>law_rag_db.json]
+    J -->|No| L[MilvusLoader]
+    K --> L
+    
+    L --> M{Language?}
+    M -->|Russian| N1[law_collection]
+    M -->|Kyrgyz| N2[law_collection_kg]
+    
+    N1 --> O[Create/Drop<br/>Collection]
+    N2 --> O
+    
+    O --> P[Insert Articles<br/>with Vectors]
+    P --> Q[Load Collection<br/>into Memory]
+    Q --> R[Ready for<br/>Semantic Search]
+    
+    style A fill:#e1f5ff
+    style R fill:#c8e6c9
+    style H fill:#fff9c4
+    style P fill:#ffccbc
+```
+
+```python
+# Full pipeline (parse DOCX → vectorize → load to Milvus)
+from parser import ParserPipeline, PipelineConfig
+
+config = PipelineConfig(
+    ru_input_dir="parser/docx",
+    kg_input_dir="parser/docx_kg",
+    milvus_db_path="milvus_law_rag.db"
+)
+
+pipeline = ParserPipeline(config)
+pipeline.process_all()  # Process both Russian and Kyrgyz documents
+```
+
+### Using Individual Components
+
+```python
+from parser import DocumentParser, Language, Vectorizer, MilvusLoader
+
+# 1. Parse DOCX files
+parser = DocumentParser(Language.RUSSIAN, "parser/docx")
+articles = parser.parse_directory(save_jsonl=True)
+
+# 2. Vectorize articles
+vectorizer = Vectorizer()
+vectorized = vectorizer.vectorize_articles(articles)
+vectorizer.save_to_json(vectorized, "law_rag_db.json")
+
+# 3. Load to Milvus
+loader = MilvusLoader()
+loader.setup_language_collection(Language.RUSSIAN, vectorized)
+```
+
+### Milvus Initialization
+
+```bash
+# Load from existing JSON files
+python -m databases.milvus_init --from-json
+
+# Run full pipeline (parse + vectorize + load)
+python -m databases.milvus_init --full-pipeline
+
+# With custom paths
+python -m databases.milvus_init --from-json \
+  --ru-json law_rag_db.json \
+  --kg-json law_rag_db_kg.json \
+  --db-path milvus_law_rag.db
+```
+
 ## 🔧 System Components
 
 ### AI Tools (`aitools/`)
@@ -197,6 +299,16 @@ response = asyncio.run(searcher.get_response_from_image_text(
 |--------|-------------|
 | `db.py` | MySQL: users, balance, settings |
 | `milvus_db.py` | Milvus: vector search with deduplication |
+| `milvus_init.py` | Milvus initialization from JSON or full pipeline |
+
+### Document Parser (`parser/`)
+
+| Module | Description |
+|--------|-------------|
+| `document_parser.py` | OOP parser for DOCX files with Russian/Kyrgyz support. Uses `Language` enum and `PatternFactory` for language-specific patterns |
+| `vectorizer.py` | Vectorization with SentenceTransformer. Batch processing, lazy-loading, JSON save/load |
+| `milvus_loader.py` | Loading vectorized articles into Milvus. Collection management, language-based routing |
+| `pipeline.py` | End-to-end pipeline: parse → vectorize → load. Supports full workflow or JSON-only mode |
 
 ## 🛠 Technical Details
 
