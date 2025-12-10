@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Vulnerability
+    url: https://github.com/Hanbiike/law-rag-system/security/advisories/new
+    about: Please report security vulnerabilities through GitHub Security Advisories (not public issues)
+  - name: Discussions
+    url: https://github.com/Hanbiike/law-rag-system/discussions
+    about: For general questions and discussions, please use GitHub Discussions
+  - name: Email Support
+    url: mailto:hanbiike.corp@gmail.com
+    about: For private inquiries, contact us via email

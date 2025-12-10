@@ -1,0 +1,93 @@
+name: Performance Issue
+description: Report a performance problem
+title: "[PERFORMANCE]: "
+labels: ["performance", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a performance issue!
+
+  - type: dropdown
+    id: operation
+    attributes:
+      label: Operation Type
+      description: Which operation is slow?
+      options:
+        - Query embedding
+        - Milvus search
+        - LLM response generation
+        - Document processing
+        - Full query cycle (base mode)
+        - Full query cycle (pro mode)
+        - Bot response time
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Performance Issue Description
+      description: Describe the performance problem
+      placeholder: The bot takes too long to respond when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: timing
+    attributes:
+      label: Timing Information
+      description: |
+        Provide timing details:
+        - Current performance (how long it takes)
+        - Expected performance
+        - When does it occur (always, sometimes, specific conditions)
+      placeholder: |
+        Current: 30 seconds
+        Expected: < 5 seconds
+        Occurs: When sending documents larger than 5MB
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: System specifications
+      placeholder: |
+        OS: Ubuntu 22.04
+        Python: 3.11
+        CPU: Intel i7
+        RAM: 16GB
+        GPU: NVIDIA RTX 3060 (if applicable)
+    validations:
+      required: true
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Configuration
+      description: Relevant configuration settings
+      placeholder: |
+        top_k: 10
+        n_llm_questions: 3
+        response_type: pro
+        Database size: ~1000 articles
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Performance Logs
+      description: Any relevant logs or profiling information
+      render: shell
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this performance issue?
+      placeholder: |
+        1. Send query: "..."
+        2. Wait for response
+        3. Observe delay of X seconds

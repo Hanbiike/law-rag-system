@@ -1,0 +1,61 @@
+name: Question
+description: Ask a question about the Law RAG System
+title: "[QUESTION]: "
+labels: ["question", "needs-response"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question? We're here to help!
+        
+        **Before asking:**
+        - Check the [README.md](https://github.com/Hanbiike/law-rag-system/blob/main/README.md)
+        - Check existing issues and discussions
+        - Review [Troubleshooting section](https://github.com/Hanbiike/law-rag-system/blob/main/README.md#-troubleshooting)
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Question Category
+      description: What is your question about?
+      options:
+        - Installation/Setup
+        - Configuration
+        - Usage (Telegram Bot)
+        - Usage (Programmatic API)
+        - Document Parsing
+        - Database Setup
+        - Performance
+        - Security
+        - Contributing
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: How do I...?
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What Have You Tried?
+      description: What have you already attempted to solve this?
+      placeholder: |
+        I tried...
+        I looked at...
+        I expected...
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Any additional information that might help us answer your question
+      placeholder: |
+        Environment: Ubuntu 22.04, Python 3.11
+        Use case: ...
