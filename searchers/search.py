@@ -181,26 +181,44 @@ class ProLawRAGSearch:
             user_input = config.concat_query_and_doc(query, doc_data)
 
             if type == 'pro':
-                # Pro mode: Generate questions from combined input
-                llm_questions = await self._llm.get_llm_questions(
-                    user_input,
-                    self._n_llm_questions,
-                    lang=lang
-                )
-                if not llm_questions:
-                    return ""
+                # Pro mode: For each paragraph, generate n questions and search
+                # Result: paragraphs * n_questions * top_k articles
+                all_results = []
+                for paragraph in doc_data:
+                    # Generate questions for this paragraph
+                    llm_questions = await self._llm.get_llm_questions(
+                        paragraph,
+                        self._n_llm_questions,
+                        lang=lang
+                    )
+                    if not llm_questions:
+                        continue
+                    
+                    # Encode and search for each paragraph's questions
+                    query_vectors = self._embedder.encode_queries(llm_questions)
+                    paragraph_results = self._milvus.search_similar_laws(
+                        query_vectors,
+                        top_k=self._top_k,
+                        lang=lang
+                    )
+                    if paragraph_results:
+                        all_results.extend(paragraph_results)
                 
-                query_vectors = self._embedder.encode_queries(llm_questions)
+                # Deduplicate results by text
+                seen_texts = set()
+                results = []
+                for r in all_results:
+                    if r['text'] not in seen_texts:
+                        seen_texts.add(r['text'])
+                        results.append(r)
             else:
                 # Base mode: Encode document paragraphs directly
                 query_vectors = self._embedder.encode_queries(doc_data)
-
-            # Search for relevant laws
-            results = self._milvus.search_similar_laws(
-                query_vectors,
-                top_k=self._top_k,
-                lang=lang
-            )
+                results = self._milvus.search_similar_laws(
+                    query_vectors,
+                    top_k=self._top_k,
+                    lang=lang
+                )
 
             if not results:
                 return ""
@@ -249,26 +267,44 @@ class ProLawRAGSearch:
             user_input = config.concat_query_and_doc(query, doc_data)
 
             if type == 'pro':
-                # Pro mode: Generate questions from combined input
-                llm_questions = await self._llm.get_llm_questions(
-                    user_input,
-                    self._n_llm_questions,
-                    lang=lang
-                )
-                if not llm_questions:
-                    return ""
+                # Pro mode: For each paragraph, generate n questions and search
+                # Result: paragraphs * n_questions * top_k articles
+                all_results = []
+                for paragraph in doc_data:
+                    # Generate questions for this paragraph
+                    llm_questions = await self._llm.get_llm_questions(
+                        paragraph,
+                        self._n_llm_questions,
+                        lang=lang
+                    )
+                    if not llm_questions:
+                        continue
+                    
+                    # Encode and search for each paragraph's questions
+                    query_vectors = self._embedder.encode_queries(llm_questions)
+                    paragraph_results = self._milvus.search_similar_laws(
+                        query_vectors,
+                        top_k=self._top_k,
+                        lang=lang
+                    )
+                    if paragraph_results:
+                        all_results.extend(paragraph_results)
                 
-                query_vectors = self._embedder.encode_queries(llm_questions)
+                # Deduplicate results by text
+                seen_texts = set()
+                results = []
+                for r in all_results:
+                    if r['text'] not in seen_texts:
+                        seen_texts.add(r['text'])
+                        results.append(r)
             else:
                 # Base mode: Encode document paragraphs directly
                 query_vectors = self._embedder.encode_queries(doc_data)
-
-            # Search for relevant laws
-            results = self._milvus.search_similar_laws(
-                query_vectors,
-                top_k=self._top_k,
-                lang=lang
-            )
+                results = self._milvus.search_similar_laws(
+                    query_vectors,
+                    top_k=self._top_k,
+                    lang=lang
+                )
 
             if not results:
                 return ""

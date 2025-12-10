@@ -46,7 +46,9 @@ COST_BASE: Final[int] = 1
 COST_PRO: Final[int] = 2
 COST_SEARCH: Final[int] = 1
 COST_DOCUMENT: Final[int] = 3
+COST_DOCUMENT_PRO: Final[int] = 9
 COST_IMAGE: Final[int] = 3
+COST_IMAGE_PRO: Final[int] = 9
 
 # Supported image MIME types
 SUPPORTED_IMAGE_TYPES: Final[frozenset] = frozenset({
@@ -76,7 +78,11 @@ def get_searcher() -> ProLawRAGSearch:
 
 
 @lru_cache(maxsize=64)
-def get_query_cost(response_type: str, is_document: bool = False) -> int:
+def get_query_cost(
+    response_type: str,
+    is_document: bool = False,
+    is_image: bool = False
+) -> int:
     """
     Calculate query cost based on type.
     
@@ -85,12 +91,15 @@ def get_query_cost(response_type: str, is_document: bool = False) -> int:
     Parameters:
         response_type (str): Response type ('base', 'pro', or 'search').
         is_document (bool): Whether this is a document query.
+        is_image (bool): Whether this is an image query.
 
     Returns:
         int: Cost in balance units.
     """
     if is_document:
-        return COST_DOCUMENT
+        return COST_DOCUMENT_PRO if response_type == 'pro' else COST_DOCUMENT
+    if is_image:
+        return COST_IMAGE_PRO if response_type == 'pro' else COST_IMAGE
     if response_type == 'pro':
         return COST_PRO
     if response_type == 'search':
@@ -382,7 +391,7 @@ async def process_document(
     """
     Handle document uploads.
 
-    Converts document to base64 and processes it.
+    Processes PDF documents with cost based on response type.
 
     Parameters:
         message (Message): Incoming message object.
@@ -409,7 +418,10 @@ async def process_document(
         await message.answer(get_message('unsupported_format', lang))
         return
 
-    if balance < COST_DOCUMENT:
+    # Calculate cost based on response type
+    doc_cost = get_query_cost(response_type, is_document=True)
+
+    if balance < doc_cost:
         await message.answer(
             get_message('insufficient_balance', lang, balance=balance),
             parse_mode="Markdown"
@@ -419,7 +431,7 @@ async def process_document(
     processing_msg = await message.answer(get_message('processing_doc', lang))
 
     try:
-        user_repository.update_balance(telegram_id, -COST_DOCUMENT)
+        user_repository.update_balance(telegram_id, -doc_cost)
 
         file = await bot.get_file(document.file_id)
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file.file_path}"
@@ -437,12 +449,12 @@ async def process_document(
             await processing_msg.delete()
             await send_long_message(message, response, lang)
         else:
-            user_repository.update_balance(telegram_id, COST_DOCUMENT)
+            user_repository.update_balance(telegram_id, doc_cost)
             await processing_msg.edit_text(get_message('no_response', lang))
 
     except Exception as e:
         logger.error("Error processing document: %s", e)
-        user_repository.update_balance(telegram_id, COST_DOCUMENT)
+        user_repository.update_balance(telegram_id, doc_cost)
         await processing_msg.edit_text(get_message('error', lang))
 
 
@@ -454,6 +466,8 @@ async def process_image(
 ) -> None:
     """
     Handle image uploads (document screenshots).
+
+    Processes images with cost based on response type.
 
     Parameters:
         message (Message): Incoming message object.
@@ -477,7 +491,10 @@ async def process_image(
         await message.answer(get_message('image_too_large', lang))
         return
 
-    if balance < COST_IMAGE:
+    # Calculate cost based on response type
+    image_cost = get_query_cost(response_type, is_image=True)
+
+    if balance < image_cost:
         await message.answer(
             get_message('insufficient_balance', lang, balance=balance),
             parse_mode="Markdown"
@@ -487,7 +504,7 @@ async def process_image(
     processing_msg = await message.answer(get_message('processing_image', lang))
 
     try:
-        user_repository.update_balance(telegram_id, -COST_IMAGE)
+        user_repository.update_balance(telegram_id, -image_cost)
 
         file = await bot.get_file(photo.file_id)
         image_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file.file_path}"
@@ -505,12 +522,12 @@ async def process_image(
             await processing_msg.delete()
             await send_long_message(message, response, lang)
         else:
-            user_repository.update_balance(telegram_id, COST_IMAGE)
+            user_repository.update_balance(telegram_id, image_cost)
             await processing_msg.edit_text(get_message('no_response', lang))
 
     except Exception as e:
         logger.error("Error processing image: %s", e)
-        user_repository.update_balance(telegram_id, COST_IMAGE)
+        user_repository.update_balance(telegram_id, image_cost)
         await processing_msg.edit_text(get_message('error', lang))
 
 
