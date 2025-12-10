@@ -424,6 +424,66 @@ aiofiles                # Async file operations
   - Images: max 10 MB
 - Supported formats: PDF, JPEG, PNG, GIF, WebP
 
+## 🔄 Auto-Update Pipeline
+
+### Daily Legal Updates (In Development)
+
+Automated pipeline for monitoring and updating the legal database:
+
+```mermaid
+flowchart LR
+    A[Scheduled Check<br/>Daily at 02:00] --> B{New Laws<br/>Available?}
+    
+    B -->|No| C[Skip Update]
+    B -->|Yes| D[Download<br/>New Documents]
+    
+    D --> E[Legal Doc<br/>Data Extractor]
+    
+    E --> F[Extract Articles<br/>Sections, Chapters]
+    
+    F --> G[Vectorizer<br/>SentenceTransformer]
+    
+    G --> H[Generate<br/>Embeddings]
+    
+    H --> I{Language?}
+    
+    I -->|Russian| J1[Update<br/>law_collection]
+    I -->|Kyrgyz| J2[Update<br/>law_collection_kg]
+    
+    J1 --> K[LLM Analysis<br/>Generate Summary]
+    J2 --> K
+    
+    K --> L[Prepare<br/>User Notifications]
+    
+    L --> M1[Send to RU Users<br/>via Telegram]
+    L --> M2[Send to KG Users<br/>via Telegram]
+    
+    M1 --> N[Admin Logs<br/>Statistics]
+    M2 --> N
+    
+    N --> O[Update Complete]
+    
+    style A fill:#e1f5ff
+    style O fill:#c8e6c9
+    style E fill:#fff9c4
+    style G fill:#fff9c4
+    style K fill:#fff9c4
+    style I fill:#ffccbc
+    style L fill:#ffe0b2
+```
+
+**Features:**
+- 🕐 Scheduled daily checks for new legislation
+- 📥 Automatic document download from official sources
+- 🔍 Intelligent change detection
+- ⚡ Incremental updates (only new articles)
+- 🤖 **LLM-powered analysis and summaries of new laws**
+- 📢 **Automated user notifications via Telegram bot**
+- 💬 **Personalized explanations in user's language (RU/KG)**
+- 📊 Update logs and statistics
+- 🔄 Zero-downtime updates
+- 🌐 Multi-language support (RU/KG)
+
 ## 🗺 Roadmap
 
 - [x] Telegram bot with FSM
@@ -433,6 +493,8 @@ aiofiles                # Async file operations
 - [x] Singleton optimizations
 - [x] LRU caching
 - [x] Results deduplication
+- [x] OOP-based document parser
+- [ ] **Automated daily legal updates pipeline** 🚧
 - [ ] Redis for response caching
 - [ ] Web interface (FastAPI)
 - [ ] DOCX document support
