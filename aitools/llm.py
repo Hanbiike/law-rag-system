@@ -181,15 +181,15 @@ class LLMHelper:
         
     async def get_doc_data(
         self,
-        document_base64: str
+        file_url: str
     ) -> Optional[List[str]]:
         """
         Extract structured data from a PDF document.
         
-        Processes base64-encoded PDF and extracts paragraphs/items.
+        Processes PDF from URL and extracts paragraphs/items.
 
         Parameters:
-            document_base64 (str): Base64-encoded PDF document.
+            file_url (str): Direct URL to the PDF document.
 
         Returns:
             Optional[List[str]]: List of extracted paragraphs or None on error.
@@ -208,8 +208,7 @@ class LLMHelper:
                             },
                             {
                                 "type": "input_file",
-                                "filename": f"legal_document.pdf",
-                                "file_data": f"data:application/pdf;base64,{document_base64}",
+                                "file_url": file_url,
                             }
                         ],
                     },
@@ -220,18 +219,59 @@ class LLMHelper:
         except Exception as e:
             logger.error("Error extracting document data: %s", e)
             return None
+
+    async def get_image_data(
+        self,
+        image_url: str
+    ) -> Optional[List[str]]:
+        """
+        Extract structured data from a document screenshot/image.
+        
+        Processes image from URL and extracts paragraphs/items.
+
+        Parameters:
+            image_url (str): Direct URL to the image.
+
+        Returns:
+            Optional[List[str]]: List of extracted paragraphs or None on error.
+        """
+        try:
+            response = await self.nano_client.responses.parse(
+                model=config.AZURE_DEPLOYMENT_NANO,
+                instructions=DATA_EXTRACTION_INSTRUCTION,
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": "Break it into items/paragraphs."
+                            },
+                            {
+                                "type": "input_image",
+                                "image_url": image_url,
+                            }
+                        ],
+                    },
+                ],
+                text_format=docDataExtraction
+            )
+            return [q.paragraph for q in response.output_parsed.points]
+        except Exception as e:
+            logger.error("Error extracting image data: %s", e)
+            return None
         
     async def get_legal_doc_data(
         self,
-        document_base64: str
+        file_url: str
     ) -> Optional[LegalDocDataExtraction]:
         """
         Extract structured legal document data.
         
-        Processes base64-encoded PDF and extracts title, articles, and date.
+        Processes PDF from URL and extracts title, articles, and date.
 
         Parameters:
-            document_base64 (str): Base64-encoded PDF document.
+            file_url (str): Direct URL to the PDF document.
 
         Returns:
             Optional[LegalDocDataExtraction]: Extracted legal document data or None on error.
@@ -253,8 +293,7 @@ class LLMHelper:
                             },
                             {
                                 "type": "input_file",
-                                "filename": f"legal_document.pdf",
-                                "file_data": f"data:application/pdf;base64,{document_base64}",
+                                "file_url": file_url,
                             }
                         ],
                     },

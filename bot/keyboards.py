@@ -24,6 +24,7 @@ KEYBOARD_TEXTS: Final[dict] = {
     'ru': {
         'base': "📝 Базовый",
         'pro': "⚡ Продвинутый",
+        'search': "🔍 Поиск",
         'settings': "⚙️ Настройки",
         'change_lang': "🌐 Сменить язык",
         'change_type': "📋 Сменить режим"
@@ -31,6 +32,7 @@ KEYBOARD_TEXTS: Final[dict] = {
     'kg': {
         'base': "📝 Негизги",
         'pro': "⚡ Кеңейтилген",
+        'search': "🔍 Издөө",
         'settings': "⚙️ Жөндөөлөр",
         'change_lang': "🌐 Тилди өзгөртүү",
         'change_type': "📋 Режимди өзгөртүү"
@@ -82,6 +84,9 @@ def get_response_type_keyboard(lang: str = 'ru') -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton(text=texts['base'], callback_data="type_base"),
             InlineKeyboardButton(text=texts['pro'], callback_data="type_pro")
+        ],
+        [
+            InlineKeyboardButton(text=texts['search'], callback_data="type_search")
         ]
     ])
 

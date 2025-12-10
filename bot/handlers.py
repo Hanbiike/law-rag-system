@@ -4,7 +4,6 @@ Message and callback handlers for Telegram bot.
 This module contains optimized handlers for processing user messages,
 callbacks, and documents with efficient caching and error handling.
 """
-import base64
 import logging
 from functools import lru_cache
 from typing import Final, Optional
@@ -26,6 +25,7 @@ from bot.messages import (
     get_message
 )
 from bot.states import UserState
+from confs.config import TELEGRAM_BOT_TOKEN
 from databases.db import user_repository
 from searchers.search import ProLawRAGSearch
 
@@ -40,10 +40,21 @@ _searcher: Optional[ProLawRAGSearch] = None
 
 # Constants for configuration
 MAX_DOC_SIZE: Final[int] = 20 * 1024 * 1024  # 20 MB
+MAX_IMAGE_SIZE: Final[int] = 10 * 1024 * 1024  # 10 MB
 MAX_MESSAGE_LENGTH: Final[int] = 4096
 COST_BASE: Final[int] = 1
 COST_PRO: Final[int] = 2
+COST_SEARCH: Final[int] = 1
 COST_DOCUMENT: Final[int] = 3
+COST_IMAGE: Final[int] = 3
+
+# Supported image MIME types
+SUPPORTED_IMAGE_TYPES: Final[frozenset] = frozenset({
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp'
+})
 
 # Settings buttons set for quick lookup
 SETTINGS_BUTTONS: Final[frozenset] = frozenset({SETTINGS_BUTTON_RU, SETTINGS_BUTTON_KG})
@@ -72,7 +83,7 @@ def get_query_cost(response_type: str, is_document: bool = False) -> int:
     Cached for performance on repeated calls.
 
     Parameters:
-        response_type (str): Response type ('base' or 'pro').
+        response_type (str): Response type ('base', 'pro', or 'search').
         is_document (bool): Whether this is a document query.
 
     Returns:
@@ -80,7 +91,11 @@ def get_query_cost(response_type: str, is_document: bool = False) -> int:
     """
     if is_document:
         return COST_DOCUMENT
-    return COST_PRO if response_type == 'pro' else COST_BASE
+    if response_type == 'pro':
+        return COST_PRO
+    if response_type == 'search':
+        return COST_SEARCH
+    return COST_BASE
 
 
 def get_user_data(telegram_id: int) -> Optional[dict]:
@@ -407,15 +422,13 @@ async def process_document(
         user_repository.update_balance(telegram_id, -COST_DOCUMENT)
 
         file = await bot.get_file(document.file_id)
-        file_data = await bot.download_file(file.file_path)
-        file_bytes = file_data.read()
-        document_base64 = base64.b64encode(file_bytes).decode('utf-8')
+        file_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file.file_path}"
 
         query = message.caption or get_default_doc_query(lang)
 
         response = await get_searcher().get_response_from_doc_text(
             query=query,
-            document_base64=document_base64,
+            file_url=file_url,
             type=response_type,
             lang=lang
         )
@@ -430,6 +443,74 @@ async def process_document(
     except Exception as e:
         logger.error("Error processing document: %s", e)
         user_repository.update_balance(telegram_id, COST_DOCUMENT)
+        await processing_msg.edit_text(get_message('error', lang))
+
+
+@router.message(UserState.ready, F.photo)
+async def process_image(
+    message: Message,
+    state: FSMContext,
+    bot: Bot
+) -> None:
+    """
+    Handle image uploads (document screenshots).
+
+    Parameters:
+        message (Message): Incoming message object.
+        state (FSMContext): FSM context for state management.
+        bot (Bot): Bot instance for file operations.
+    """
+    telegram_id = message.from_user.id
+    user = get_user_data(telegram_id)
+
+    if not user:
+        user = ensure_user_exists(telegram_id)
+
+    lang = user.get('lang', 'ru')
+    response_type = user.get('response_type', 'base')
+    balance = user.get('balance', 0)
+
+    # Get the largest photo (last in the list)
+    photo = message.photo[-1]
+
+    if photo.file_size > MAX_IMAGE_SIZE:
+        await message.answer(get_message('image_too_large', lang))
+        return
+
+    if balance < COST_IMAGE:
+        await message.answer(
+            get_message('insufficient_balance', lang, balance=balance),
+            parse_mode="Markdown"
+        )
+        return
+
+    processing_msg = await message.answer(get_message('processing_image', lang))
+
+    try:
+        user_repository.update_balance(telegram_id, -COST_IMAGE)
+
+        file = await bot.get_file(photo.file_id)
+        image_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file.file_path}"
+
+        query = message.caption or get_default_doc_query(lang)
+
+        response = await get_searcher().get_response_from_image_text(
+            query=query,
+            image_url=image_url,
+            type=response_type,
+            lang=lang
+        )
+
+        if response:
+            await processing_msg.delete()
+            await send_long_message(message, response, lang)
+        else:
+            user_repository.update_balance(telegram_id, COST_IMAGE)
+            await processing_msg.edit_text(get_message('no_response', lang))
+
+    except Exception as e:
+        logger.error("Error processing image: %s", e)
+        user_repository.update_balance(telegram_id, COST_IMAGE)
         await processing_msg.edit_text(get_message('error', lang))
 
 
@@ -514,6 +595,34 @@ async def process_document_without_state(
     if user:
         await state.set_state(UserState.ready)
         await process_document(message, state, bot)
+    else:
+        await state.set_state(UserState.selecting_language)
+        await message.answer(
+            get_message('welcome', 'ru'),
+            reply_markup=get_language_keyboard()
+        )
+
+
+@router.message(F.photo)
+async def process_image_without_state(
+    message: Message,
+    state: FSMContext,
+    bot: Bot
+) -> None:
+    """
+    Handle image messages when user has no state.
+
+    Parameters:
+        message (Message): Incoming message object.
+        state (FSMContext): FSM context for state management.
+        bot (Bot): Bot instance for file operations.
+    """
+    telegram_id = message.from_user.id
+    user = get_user_data(telegram_id)
+
+    if user:
+        await state.set_state(UserState.ready)
+        await process_image(message, state, bot)
     else:
         await state.set_state(UserState.selecting_language)
         await message.answer(

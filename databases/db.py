@@ -322,12 +322,12 @@ class UserRepository:
 
         Parameters:
             telegram_id (int): User's Telegram ID.
-            response_type (str): Response type ('base' or 'pro').
+            response_type (str): Response type ('base', 'pro', or 'search').
 
         Returns:
             bool: True if updated, False otherwise.
         """
-        if response_type not in ('base', 'pro'):
+        if response_type not in ('base', 'pro', 'search'):
             return False
 
         return self._execute_update(
