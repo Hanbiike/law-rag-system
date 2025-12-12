@@ -541,6 +541,101 @@ flowchart TD
 - 🔄 Zero-downtime updates
 - 🌐 Multi-language support (RU/KG)
 
+## 🧠 Bot Memory with Conversations API (In Development)
+
+### Persistent Context Across Sessions
+
+Implementation of OpenAI's Conversations API for maintaining conversation state:
+
+```mermaid
+flowchart TD
+    A[User Starts<br/>Conversation] --> B{Conversation<br/>Exists?}
+    
+    B -->|No| C[Create New<br/>Conversation Object]
+    B -->|Yes| D[Load Existing<br/>Conversation]
+    
+    C --> E[Store conversation_id<br/>in User DB]
+    D --> E
+    
+    E --> F[User Sends<br/>Message]
+    
+    F --> G[Responses API<br/>with conversation_id]
+    
+    G --> H[Add Message<br/>to Conversation Items]
+    
+    H --> I[LLM Processing<br/>with Full Context]
+    
+    I --> J[Generate Response<br/>with Context Awareness]
+    
+    J --> K[Store Response<br/>in Conversation]
+    
+    K --> L[Send to User<br/>via Telegram]
+    
+    L --> M{Continue<br/>Conversation?}
+    
+    M -->|Yes| F
+    M -->|No| N[Save Conversation<br/>State]
+    
+    N --> O[Available for<br/>Future Sessions]
+    
+    style A fill:#e1f5ff
+    style O fill:#c8e6c9
+    style C fill:#fff9c4
+    style I fill:#fff9c4
+    style K fill:#ffccbc
+```
+
+**Features:**
+- 💾 **Persistent conversation state** across sessions and devices
+- 🔄 **Long-running conversation objects** with durable identifiers
+- 📝 **Automatic context management** - no need to chain messages manually
+- 🎯 **Multi-turn interactions** with full conversation history
+- 📱 **Cross-device continuity** - resume conversations anywhere
+- 🗂️ **Conversation items storage** - messages, tool calls, outputs
+- ⚡ **Efficient context handling** - managed by OpenAI's infrastructure
+
+**API Integration:**
+```python
+# Create a new conversation
+conversation = openai.conversations.create()
+
+# Use in subsequent responses
+response = openai.responses.create(
+    model="gpt-4.1",
+    input=[{"role": "user", "content": "Что такое медиация?"}],
+    conversation=conversation.id
+)
+
+# Continue the conversation
+response2 = openai.responses.create(
+    model="gpt-4.1",
+    input=[{"role": "user", "content": "Какие статьи регулируют это?"}],
+    conversation=conversation.id  # Same conversation ID
+)
+```
+
+### Why Not `previous_response_id`?
+
+**The Problem with Response Chaining:**
+
+![Context Window Problem](https://raw.githubusercontent.com/Hanbiike/law-rag-system/main/context_window.png)
+
+**⚠️ Critical Billing Issue:**
+
+**Even when using `previous_response_id`, all previous input tokens for responses in the chain are billed as input tokens in the API.**
+
+This leads to:
+- 📈 **Exponential token cost growth** with each turn
+- 💰 **Higher API bills** for multi-turn conversations
+- 🔄 **Redundant context re-processing** on every request
+- ⏱️ **Slower response times** due to larger context windows
+
+**Solution: Conversations API**
+- ✅ Context managed by OpenAI infrastructure
+- ✅ Pay only for new tokens, not entire history
+- ✅ Efficient state management
+- ✅ Scalable for long conversations
+
 ## 🗺 Roadmap
 
 - [x] Telegram bot with FSM
@@ -552,6 +647,7 @@ flowchart TD
 - [x] Results deduplication
 - [x] OOP-based document parser
 - [ ] **Automated daily legal updates pipeline** 🚧
+- [ ] **Bot memory with Conversations API** 🚧
 - [ ] Redis for response caching
 - [ ] Web interface (FastAPI)
 - [ ] DOCX document support
