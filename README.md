@@ -494,21 +494,9 @@ flowchart TD
     B -->|No| C[Skip Update]
     B -->|Yes| D[Download<br/>New Documents]
     
-    D --> E[Legal Doc<br/>Data Extractor]
+    D --> E[Parser's pipeline]
     
-    E --> F[Extract Articles<br/>Sections, Chapters]
-    
-    F --> G[Vectorizer<br/>SentenceTransformer]
-    
-    G --> H[Generate<br/>Embeddings]
-    
-    H --> I{Language?}
-    
-    I -->|Russian| J1[Update<br/>law_collection]
-    I -->|Kyrgyz| J2[Update<br/>law_collection_kg]
-    
-    J1 --> K[LLM Analysis<br/>Generate Summary]
-    J2 --> K
+    E --> K[LLM Analysis<br/>Generate Summary]
     
     K --> L[Prepare<br/>User Notifications]
     
@@ -523,9 +511,7 @@ flowchart TD
     style A fill:#e1f5ff
     style O fill:#c8e6c9
     style E fill:#fff9c4
-    style G fill:#fff9c4
     style K fill:#fff9c4
-    style I fill:#ffccbc
     style L fill:#ffe0b2
 ```
 
@@ -557,32 +543,8 @@ flowchart TD
     C --> E[Store conversation_id<br/>in User DB]
     D --> E
     
-    E --> F[User Sends<br/>Message]
-    
-    F --> G[Responses API<br/>with conversation_id]
-    
-    G --> H[Add Message<br/>to Conversation Items]
-    
-    H --> I[LLM Processing<br/>with Full Context]
-    
-    I --> J[Generate Response<br/>with Context Awareness]
-    
-    J --> K[Store Response<br/>in Conversation]
-    
-    K --> L[Send to User<br/>via Telegram]
-    
-    L --> M{Continue<br/>Conversation?}
-    
-    M -->|Yes| F
-    M -->|No| N[Save Conversation<br/>State]
-    
-    N --> O[Available for<br/>Future Sessions]
-    
     style A fill:#e1f5ff
-    style O fill:#c8e6c9
     style C fill:#fff9c4
-    style I fill:#fff9c4
-    style K fill:#ffccbc
 ```
 
 **Features:**
@@ -618,7 +580,7 @@ response2 = openai.responses.create(
 
 **The Problem with Response Chaining:**
 
-![Context Window Problem](https://raw.githubusercontent.com/Hanbiike/law-rag-system/main/context_window.png)
+![Context Window Problem](https://github.com/Hanbiike/law-rag-system/blob/main/context-window.png?raw=true)
 
 **⚠️ Critical Billing Issue:**
 

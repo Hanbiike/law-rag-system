@@ -496,21 +496,10 @@ flowchart TD
     B -->|Нет| C[Пропустить<br/>обновление]
     B -->|Да| D[Скачать<br/>новые документы]
     
-    D --> E[Legal Doc<br/>Data Extractor]
+    D --> E[Пайплайн парсера]
     
-    E --> F[Извлечение статей<br/>Разделы, Главы]
     
-    F --> G[Vectorizer<br/>SentenceTransformer]
-    
-    G --> H[Генерация<br/>эмбеддингов]
-    
-    H --> I{Язык?}
-    
-    I -->|Русский| J1[Обновление<br/>law_collection]
-    I -->|Кыргызский| J2[Обновление<br/>law_collection_kg]
-    
-    J1 --> K[LLM Анализ<br/>Генерация сводки]
-    J2 --> K
+    E --> K[LLM Анализ<br/>Генерация сводки]
     
     K --> L[Подготовка<br/>уведомлений<br/>пользователям]
     
@@ -525,9 +514,7 @@ flowchart TD
     style A fill:#e1f5ff
     style O fill:#c8e6c9
     style E fill:#fff9c4
-    style G fill:#fff9c4
     style K fill:#fff9c4
-    style I fill:#ffccbc
     style L fill:#ffe0b2
 ```
 
@@ -559,32 +546,8 @@ flowchart TD
     C --> E[Сохранить conversation_id<br/>в БД пользователя]
     D --> E
     
-    E --> F[Пользователь отправляет<br/>сообщение]
-    
-    F --> G[Responses API<br/>с conversation_id]
-    
-    G --> H[Добавить сообщение<br/>в элементы диалога]
-    
-    H --> I[Обработка LLM<br/>с полным контекстом]
-    
-    I --> J[Генерация ответа<br/>с учетом контекста]
-    
-    J --> K[Сохранение ответа<br/>в диалоге]
-    
-    K --> L[Отправка пользователю<br/>через Telegram]
-    
-    L --> M{Продолжить<br/>диалог?}
-    
-    M -->|Да| F
-    M -->|Нет| N[Сохранить состояние<br/>диалога]
-    
-    N --> O[Доступен для<br/>будущих сеансов]
-    
     style A fill:#e1f5ff
-    style O fill:#c8e6c9
     style C fill:#fff9c4
-    style I fill:#fff9c4
-    style K fill:#ffccbc
 ```
 
 **Возможности:**
@@ -620,7 +583,7 @@ response2 = openai.responses.create(
 
 **Проблема с чейнингом ответов:**
 
-![Context Window Problem](https://raw.githubusercontent.com/Hanbiike/law-rag-system/main/context_window.png)
+![Context Window Problem](https://github.com/Hanbiike/law-rag-system/blob/main/context-window.png?raw=true)
 
 **⚠️ Критическая проблема биллинга:**
 
