@@ -244,42 +244,21 @@ response = asyncio.run(searcher.get_response_from_image_text(
 Система включает полный ООП-пайплайн для обработки юридических документов:
 
 ```mermaid
-flowchart TD
-    A[DOCX Файлы<br/>Русский/Кыргызский] --> B[DocumentParser]
-    B --> C{Язык?}
-    
-    C -->|Русский| D1[Парсинг с<br/>русскими паттернами]
-    C -->|Кыргызский| D2[Парсинг с<br/>кыргызскими паттернами]
-    
-    D1 --> E[Извлечение статей<br/>+ Раздел/Глава]
-    D2 --> E
-    
-    E --> F[Объекты Article<br/>Список]
-    F --> G[Vectorizer]
-    
-    G --> H[SentenceTransformer<br/>Batch кодирование]
-    H --> I[Объекты<br/>VectorizedArticle]
-    
-    I --> J{Сохранить JSON?}
-    J -->|Да| K[Сохранение в<br/>law_rag_db.json]
-    J -->|Нет| L[MilvusLoader]
-    K --> L
-    
-    L --> M{Язык?}
-    M -->|Русский| N1[law_collection]
-    M -->|Кыргызский| N2[law_collection_kg]
-    
-    N1 --> O[Создание/Удаление<br/>Коллекции]
+flowchart LR
+    A["Документы"] -- Русский --> D1["Парсинг с русскими паттернами"]
+    A -- Кыргызский --> D2["Парсинг с кыргызскими паттернами"]
+    D1 --> G["Векторизация"]
+    D2 --> G
+    G --> L[("Вставка статей<br>в векторную БД")]
+    L -- Русский --> N1[("law_collection")]
+    L -- Кыргызский --> N2[("law_collection_kg")]
+    N1 --> O["Готово для<br>семантического поиска"]
     N2 --> O
-    
-    O --> P[Вставка статей<br/>с векторами]
-    P --> Q[Загрузка коллекции<br/>в память]
-    Q --> R[Готово для<br/>семантического поиска]
-    
+
     style A fill:#e1f5ff
-    style R fill:#c8e6c9
-    style H fill:#fff9c4
-    style P fill:#ffccbc
+    style G fill:#ffccbc
+    style L fill:#fff9c4
+    style O fill:#c8e6c9
 ```
 
 ```python
@@ -374,19 +353,16 @@ python -m databases.milvus_init --from-json \
 #### Текстовые запросы
 
 ```mermaid
-flowchart TD
-    A[Запрос пользователя] --> B{Режим?}
-    B -->|pro| C[LLM генерирует<br/>уточняющие вопросы]
-    B -->|base/search| D[Прямая векторизация]
-    C --> E[QueryEmbedder<br/>векторизация]
-    D --> E
-    E --> F[Milvus поиск<br/>COSINE similarity]
+flowchart LR
+    A[Запрос<br/>пользователя]
+    A -->|pro| C[LLM генерация<br/>TOP_N<br/>enhanced prompts]
+    A -->|base/search| E
+    C --> E[Векторизация<br/> запросов]
+    E --> F[(Поиск TOP_K статей<br/>Cosine similarity)]
     F --> G[Дедупликация<br/>результатов]
-    G --> H{Режим?}
-    H -->|search| I[Форматирование<br/>статей]
-    H -->|base/pro| J[LLM генерация<br/>ответа с контекстом]
-    I --> K[Ответ пользователю]
-    J --> K
+    G --> |search| K[Форматирование<br/>статей]
+    G -->|base/pro| J[LLM генерация<br/>ответа с контекстом<br/>Base = TOP_K<br/>PRO = TOP_K * TOP_N]
+    J --> K[Ответ<br/>пользователю]
     
     style A fill:#e1f5ff
     style K fill:#c8e6c9
@@ -397,30 +373,22 @@ flowchart TD
 #### Документы/изображения
 
 ```mermaid
-flowchart TD
-    A[Документ/Изображение URL] --> B[LLM извлечение<br/>параграфов]
-    B --> C{Режим?}
+flowchart LR
+    A["Документ/Изображение URL"] --> B["Пайплайн<br>парсера<br>--------------<br>Разделение<br>на параграфы"]
+    B -- base/search --> D1["Векторизация<br>каждого<br>параграфа"]
+    D1 --> D2["Поиск TOP_K статей для<br> каждого параграфа"] --> G
+    B -- pro --> E1["Для каждого параграфа<br>LLM генерация<br>TOP_N prompts"]
+    E1 --> E2["Векторизация<br>каждого<br>промпта"]
+    E2 --> E3["Поиск TOP_K статей для<br> каждого промпта"] --> G["Дедупликация<br>результатов"]
     
-    C -->|base| D1[Векторизация<br/>каждого параграфа]
-    D1 --> D2[Поиск top_k<br/>для каждого]
-    D2 --> D3[Контекст:<br/>paragraphs × top_k]
-    
-    C -->|pro| E1[Для КАЖДОГО параграфа]
-    E1 --> E2[Генерация n вопросов]
-    E2 --> E3[Поиск top_k<br/>для каждого вопроса]
-    E3 --> E4[Контекст:<br/>paragraphs × n × top_k]
-    
-    D3 --> F[Дедупликация<br/>результатов]
-    E4 --> F
-    F --> G[LLM генерирует<br/>финальный ответ]
-    G --> H[Ответ пользователю]
-    
+    G -- search --> K["Ответ<br>пользователю"]
+    G -- base/pro --> J["LLM генерация<br>ответа с контекстом<br>P - кол-во параграфов<br>Base = P * TOP_K<br>PRO = P * TOP_K * TOP_N"]
+    J --> K
+
     style A fill:#e1f5ff
-    style H fill:#c8e6c9
-    style B fill:#fff9c4
-    style E2 fill:#fff9c4
-    style G fill:#fff9c4
-    style E4 fill:#ffccbc
+    style E1 fill:#FFF9C4
+    style K fill:#c8e6c9
+    style J fill:#fff9c4
 ```
 
 ### Структура данных Milvus
@@ -490,31 +458,24 @@ aiofiles                # Async файловые операции
 Автоматизированный пайплайн для мониторинга и обновления базы законов:
 
 ```mermaid
-flowchart TD
-    A[Запланированная<br/>проверка<br/>Ежедневно 02:00] --> B{Новые законы<br/>доступны?}
+flowchart LR
+    A[Запланированная<br/>проверка<br/>Ежедневно 20:00] --> B{Новые законы доступны?}
     
     B -->|Нет| C[Пропустить<br/>обновление]
-    B -->|Да| D[Скачать<br/>новые документы]
-    
-    D --> E[Пайплайн парсера]
+    B -->|Да| E[Пайплайн<br/>парсера]
     
     
-    E --> K[LLM Анализ<br/>Генерация сводки]
+    E --> L[LLM анализ<br/>новых<br/>законов]
     
-    K --> L[Подготовка<br/>уведомлений<br/>пользователям]
+    L --> M1[Отправка RU<br/>пользователям]
+    L --> M2[Отправка KG<br/>пользователям]
     
-    L --> M1[Отправка RU<br/>пользователям<br/>через Telegram]
-    L --> M2[Отправка KG<br/>пользователям<br/>через Telegram]
-    
-    M1 --> N[Админ логи<br/>Статистика]
-    M2 --> N
-    
-    N --> O[Обновление<br/>завершено]
+    M1 --> O
+    M2 --> O[Обновление<br/>завершено]
     
     style A fill:#e1f5ff
     style O fill:#c8e6c9
     style E fill:#fff9c4
-    style K fill:#fff9c4
     style L fill:#ffe0b2
 ```
 

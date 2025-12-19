@@ -244,42 +244,21 @@ response = asyncio.run(searcher.get_response_from_image_text(
 The system includes a complete OOP-based pipeline for processing legal documents:
 
 ```mermaid
-flowchart TD
-    A[DOCX Files<br/>Russian/Kyrgyz] --> B[DocumentParser]
-    B --> C{Language?}
-    
-    C -->|Russian| D1[Parse with<br/>Russian patterns]
-    C -->|Kyrgyz| D2[Parse with<br/>Kyrgyz patterns]
-    
-    D1 --> E[Extract Articles<br/>+ Section/Chapter]
-    D2 --> E
-    
-    E --> F[Article Objects<br/>List]
-    F --> G[Vectorizer]
-    
-    G --> H[SentenceTransformer<br/>Batch Encoding]
-    H --> I[VectorizedArticle<br/>Objects]
-    
-    I --> J{Save JSON?}
-    J -->|Yes| K[Save to<br/>law_rag_db.json]
-    J -->|No| L[MilvusLoader]
-    K --> L
-    
-    L --> M{Language?}
-    M -->|Russian| N1[law_collection]
-    M -->|Kyrgyz| N2[law_collection_kg]
-    
-    N1 --> O[Create/Drop<br/>Collection]
+flowchart LR
+    A["Documents"] -- Russian --> D1["Parse with<br>Russian patterns"]
+    A -- Kyrgyz --> D2["Parse with<br>Kyrgyz patterns"]
+    D1 --> G["Vectorization"]
+    D2 --> G
+    G --> L[("Insert articles<br>into vector DB")]
+    L -- Russian --> N1[("law_collection")]
+    L -- Kyrgyz --> N2[("law_collection_kg")]
+    N1 --> O["Ready for<br>semantic search"]
     N2 --> O
-    
-    O --> P[Insert Articles<br/>with Vectors]
-    P --> Q[Load Collection<br/>into Memory]
-    Q --> R[Ready for<br/>Semantic Search]
-    
+
     style A fill:#e1f5ff
-    style R fill:#c8e6c9
-    style H fill:#fff9c4
-    style P fill:#ffccbc
+    style G fill:#ffccbc
+    style L fill:#fff9c4
+    style O fill:#c8e6c9
 ```
 
 ```python
@@ -374,19 +353,16 @@ python -m databases.milvus_init --from-json \
 #### Text Queries
 
 ```mermaid
-flowchart TD
-    A[User Query] --> B{Mode?}
-    B -->|pro| C[LLM generates<br/>clarifying questions]
-    B -->|base/search| D[Direct vectorization]
-    C --> E[QueryEmbedder<br/>vectorization]
-    D --> E
-    E --> F[Milvus search<br/>COSINE similarity]
-    F --> G[Results<br/>deduplication]
-    G --> H{Mode?}
-    H -->|search| I[Format<br/>articles]
-    H -->|base/pro| J[LLM generates<br/>answer with context]
-    I --> K[Response to user]
-    J --> K
+flowchart LR
+    A["User<br/>Query"]
+    A -->|pro| C["LLM generates<br/>TOP_N<br/>enhanced prompts"]
+    A -->|base/search| E
+    C --> E["Vectorize<br/>queries"]
+    E --> F[("Search TOP_K articles<br/>Cosine similarity")]
+    F --> G["Deduplicate<br/>results"]
+    G --> |search| K["Format<br/>articles"]
+    G -->|base/pro| J["LLM generates<br/>answer with context<br/>Base = TOP_K<br/>PRO = TOP_K * TOP_N"]
+    J --> K["Response<br/>to user"]
     
     style A fill:#e1f5ff
     style K fill:#c8e6c9
@@ -397,30 +373,22 @@ flowchart TD
 #### Documents/Images
 
 ```mermaid
-flowchart TD
-    A[Document/Image URL] --> B[LLM extracts<br/>paragraphs]
-    B --> C{Mode?}
+flowchart LR
+    A["Document/Image URL"] --> B["Parser<br>pipeline<br>--------------<br>Split into<br>paragraphs"]
+    B -- base/search --> D1["Vectorize<br>each<br>paragraph"]
+    D1 --> D2["Search TOP_K articles for<br> each paragraph"] --> G
+    B -- pro --> E1["For each paragraph<br>LLM generates<br>TOP_N prompts"]
+    E1 --> E2["Vectorize<br>each<br>prompt"]
+    E2 --> E3["Search TOP_K articles for<br> each prompt"] --> G["Deduplicate<br>results"]
     
-    C -->|base| D1[Vectorize<br/>each paragraph]
-    D1 --> D2[Search top_k<br/>for each]
-    D2 --> D3[Context:<br/>paragraphs × top_k]
-    
-    C -->|pro| E1[For EACH paragraph]
-    E1 --> E2[Generate n questions]
-    E2 --> E3[Search top_k<br/>for each question]
-    E3 --> E4[Context:<br/>paragraphs × n × top_k]
-    
-    D3 --> F[Results<br/>deduplication]
-    E4 --> F
-    F --> G[LLM generates<br/>final answer]
-    G --> H[Response to user]
-    
+    G -- search --> K["Response<br>to user"]
+    G -- base/pro --> J["LLM generates<br>answer with context<br>P - number of paragraphs<br>Base = P * TOP_K<br>PRO = P * TOP_K * TOP_N"]
+    J --> K
+
     style A fill:#e1f5ff
-    style H fill:#c8e6c9
-    style B fill:#fff9c4
-    style E2 fill:#fff9c4
-    style G fill:#fff9c4
-    style E4 fill:#ffccbc
+    style E1 fill:#FFF9C4
+    style K fill:#c8e6c9
+    style J fill:#fff9c4
 ```
 
 ### Milvus Data Structure
@@ -488,30 +456,24 @@ aiofiles                # Async file operations
 Automated pipeline for monitoring and updating the legal database:
 
 ```mermaid
-flowchart TD
-    A[Scheduled Check<br/>Daily at 02:00] --> B{New Laws<br/>Available?}
+flowchart LR
+    A["Scheduled<br/>check<br/>Daily at 8PM"] --> B{"New laws available?"}
     
-    B -->|No| C[Skip Update]
-    B -->|Yes| D[Download<br/>New Documents]
+    B -->|No| C["Skip<br/>update"]
+    B -->|Yes| E["Parser<br/>pipeline"]
     
-    D --> E[Parser's pipeline]
     
-    E --> K[LLM Analysis<br/>Generate Summary]
+    E --> L["LLM analysis<br/>of new<br/>laws"]
     
-    K --> L[Prepare<br/>User Notifications]
+    L --> M1["Send to RU<br/>users"]
+    L --> M2["Send to KG<br/>users"]
     
-    L --> M1[Send to RU Users<br/>via Telegram]
-    L --> M2[Send to KG Users<br/>via Telegram]
-    
-    M1 --> N[Admin Logs<br/>Statistics]
-    M2 --> N
-    
-    N --> O[Update Complete]
+    M1 --> O
+    M2 --> O["Update<br/>complete"]
     
     style A fill:#e1f5ff
     style O fill:#c8e6c9
     style E fill:#fff9c4
-    style K fill:#fff9c4
     style L fill:#ffe0b2
 ```
 
@@ -535,12 +497,12 @@ Implementation of OpenAI's Conversations API for maintaining conversation state:
 
 ```mermaid
 flowchart TD
-    A[User Starts<br/>Conversation] --> B{Conversation<br/>Exists?}
+    A["User starts<br/>conversation"] --> B{"Conversation<br/>exists?"}
     
-    B -->|No| C[Create New<br/>Conversation Object]
-    B -->|Yes| D[Load Existing<br/>Conversation]
+    B -->|No| C["Create new<br/>Conversation object"]
+    B -->|Yes| D["Load<br/>existing conversation"]
     
-    C --> E[Store conversation_id<br/>in User DB]
+    C --> E["Save conversation_id<br/>in user DB"]
     D --> E
     
     style A fill:#e1f5ff
