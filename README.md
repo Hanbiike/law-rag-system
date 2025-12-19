@@ -439,6 +439,10 @@ aiofiles                # Async file operations
 | **Document base** | ~5-10 sec |
 | **Document pro** | ~15-30 sec (deep analysis) |
 
+### RAG Evaluation Metrics
+
+![RAG Evaluation Metrics](https://github.com/Hanbiike/law-rag-system/blob/main/rag_evaluation_metrics.png?raw=true)
+
 ## 🔒 Security
 
 - ⚠️ Never commit `.env` to git
