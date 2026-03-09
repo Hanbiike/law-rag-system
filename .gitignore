@@ -5,6 +5,4 @@ __pycache__/
 law_rag_db_kg.json
 law_rag_db.json
 
-milvus_law_rag.db
-
 .env
