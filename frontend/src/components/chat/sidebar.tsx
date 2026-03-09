@@ -340,7 +340,7 @@ export function SideBar(): React.JSX.Element {
           </Button>
           {/* Chat List - viewport override fixes Radix's display:table that breaks text truncation */}
           <ScrollArea className="flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block [&_[data-slot=scroll-area-viewport]>div]:!min-w-0">
-            <div className="space-y-0.5" role="listbox" aria-label="Chats">
+            <div className="space-y-0.5 pb-2" role="listbox" aria-label="Chats">
               {chatList.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12">
                   <div className="border-border/40 bg-muted/50 relative mb-5 rounded-2xl border p-5 shadow-sm">

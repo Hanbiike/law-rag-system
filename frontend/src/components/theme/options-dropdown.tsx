@@ -51,8 +51,6 @@ export default function ThemeOptionsDropdown(): React.JSX.Element | null {
   }, [])
 
   const selectedPreset = themePresets[themePreset]
-  const selectedColors =
-    selectedPreset?.styles?.[resolvedTheme] ?? selectedPreset?.styles?.light ?? {}
 
   const filteredOptions = useMemo(() => {
     if (!search.trim()) {
@@ -100,10 +98,12 @@ export default function ThemeOptionsDropdown(): React.JSX.Element | null {
     }
 
     document.addEventListener('mousedown', handleClick)
+    document.addEventListener('touchstart', handleClick)
     document.addEventListener('keydown', handleKey)
 
     return () => {
       document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('touchstart', handleClick)
       document.removeEventListener('keydown', handleKey)
     }
   }, [open, closeDropdown])
@@ -143,7 +143,7 @@ export default function ThemeOptionsDropdown(): React.JSX.Element | null {
   }
 
   return (
-    <div className="border-input flex items-stretch rounded-md border" ref={dropdownRef}>
+    <div className="border-input flex w-full items-stretch rounded-md border" ref={dropdownRef}>
       <Button
         variant="ghost"
         size="sm"
@@ -161,20 +161,19 @@ export default function ThemeOptionsDropdown(): React.JSX.Element | null {
           variant="ghost"
           size="sm"
           onClick={() => setOpen((prev) => !prev)}
-          className="text-card-foreground group h-9 max-w-[260px] min-w-40 items-center justify-between gap-2 rounded-md px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:border-transparent md:rounded-none"
+          className="text-card-foreground group h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md px-2.5 text-sm font-medium focus-visible:ring-0 focus-visible:border-transparent md:max-w-[200px] md:rounded-none"
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-label={`Selected theme: ${selectedPreset?.label || themePreset}`}
         >
           <div className="flex min-w-0 items-center gap-2 text-left">
-            <MiniSwatches colors={selectedColors} className="shrink-0" swatchClassName="size-4" />
             <span className="truncate">{selectedPreset?.label || themePreset}</span>
           </div>
           <ChevronDownIcon className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
         </Button>
 
         {open && (
-          <div className="border-border bg-popover text-popover-foreground fixed top-[calc(3.5rem+env(safe-area-inset-top))] right-2 left-2 z-30 rounded-xl border shadow-2xl md:absolute md:top-auto md:left-auto md:right-0 md:mt-2 md:w-80">
+          <div className="border-border bg-popover text-popover-foreground fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom))] right-2 left-2 z-[60] rounded-xl border shadow-2xl md:absolute md:bottom-auto md:left-auto md:right-0 md:top-auto md:mt-2 md:w-80">
             <div className="flex items-center gap-2 border-b px-3 py-1.5">
               <SearchIcon className="text-muted-foreground size-4" aria-hidden="true" />
               <Input

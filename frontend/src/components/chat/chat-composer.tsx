@@ -17,7 +17,6 @@ import {
   type UploadedImage
 } from '@/components/chat/chat-attachments'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { useAppContext } from '@/contexts/app'
 import { useUIStrings } from '@/lib/i18n'
@@ -100,7 +99,11 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
   const hasText = message.trim().length > 0
   const hasAttachments = uploadedImages.length > 0 || uploadedDocuments.length > 0
   const hasContent = hasText || hasAttachments
-  const canSend = isChatHydrated && hasActiveChat && !isSending && hasContent
+  // hasActiveChat is intentionally excluded: handleSend in chat.tsx calls
+  // ensureActiveChat() which creates a default chat on first send.
+  // Guarding on hasActiveChat here disabled the button for new users
+  // (no stored chat) which broke mobile where localStorage is cleared often.
+  const canSend = isChatHydrated && !isSending && hasContent
 
   useImperativeHandle(ref, () => ({
     focus: () => {
@@ -337,7 +340,7 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
         return
       }
 
-      if (!isChatHydrated || !hasActiveChat) {
+      if (!isChatHydrated) {
         setComposerError('Setting up your chat. Please wait a moment.')
         return
       }
@@ -483,6 +486,8 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             id={chatInputId}
             aria-invalid={!!composerError}
             aria-describedby={composerError ? `${helperTextId} ${errorTextId}` : helperTextId}
+            autoComplete="off"
+            suppressHydrationWarning
             onFocus={() => setIsComposerFocused(true)}
             onBlur={() => setIsComposerFocused(false)}
             onCompositionStart={() => setIsComposing(true)}
@@ -506,23 +511,17 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
               className="hidden"
               onChange={handleFileUpload}
             />
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon-sm"
-                  variant="ghost"
-                  disabled={isSending || !isChatHydrated}
-                  onClick={() => fileInputRef.current?.click()}
-                  aria-label={t.attachFile}
-                  className="text-muted-foreground hover:text-foreground hover:bg-primary/5 group/attach disabled:bg-muted/40 disabled:text-muted-foreground size-11 rounded-full transition-colors duration-200 disabled:opacity-100 md:size-8"
-                >
-                  <Paperclip className="size-4 transition-transform duration-200 group-hover/attach:scale-110" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="top" className="text-xs">
-                Attach file (images, PDF, TXT, CSV, Excel)
-              </TooltipContent>
-            </Tooltip>
+            <Button
+              size="icon-sm"
+              variant="ghost"
+              disabled={isSending || !isChatHydrated}
+              onClick={() => fileInputRef.current?.click()}
+              aria-label={t.attachFile}
+              title="Attach file (images, PDF, TXT, CSV, Excel)"
+              className="text-muted-foreground hover:text-foreground hover:bg-primary/5 group/attach disabled:bg-muted/40 disabled:text-muted-foreground size-11 rounded-full transition-colors duration-200 disabled:opacity-100 md:size-8"
+            >
+              <Paperclip className="size-4 transition-transform duration-200 group-hover/attach:scale-110" />
+            </Button>
             {showClear && (
               <Button
                 size="sm"
@@ -545,54 +544,42 @@ export const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(fu
             </div>
           ) : (
             <div className="flex gap-2">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    disabled={isSending || !isChatHydrated}
-                    onClick={toggleVoiceInput}
-                    aria-label={isListening ? t.stopVoice : t.startVoice}
-                    className={cn(
-                      'disabled:bg-muted/40 disabled:text-muted-foreground size-11 rounded-full disabled:opacity-100 md:size-8',
-                      isListening
-                        ? 'text-destructive relative'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-primary/5 group/mic transition-colors duration-200'
-                    )}
-                  >
-                    {isListening && (
-                      <>
-                        <span className="bg-destructive/25 absolute inset-0 animate-[voice-ring_1.5s_ease-out_infinite] rounded-full motion-reduce:animate-none" />
-                        <span className="bg-destructive/15 absolute inset-0 animate-[voice-ring_1.5s_ease-out_0.4s_infinite] rounded-full motion-reduce:animate-none" />
-                      </>
-                    )}
-                    {isListening ? (
-                      <MicOff className="relative size-4" />
-                    ) : (
-                      <Mic className="size-4 transition-transform duration-200 group-hover/mic:scale-110" />
-                    )}
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  {isListening ? 'Stop voice input' : 'Start voice input'}
-                </TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="icon-sm"
-                    disabled={!canSend}
-                    className="bg-accent text-accent-foreground hover:bg-accent/90 disabled:bg-muted disabled:text-muted-foreground group/send relative size-11 overflow-hidden rounded-full transition-[transform,box-shadow] duration-200 hover:scale-105 hover:shadow-lg active:scale-90 disabled:cursor-not-allowed disabled:opacity-100 disabled:hover:scale-100 disabled:hover:shadow-none md:size-8"
-                    onClick={handleSubmit}
-                    aria-label={t.sendMessage}
-                  >
-                    <ArrowUp className="size-4 transition-transform duration-150 group-hover/send:-translate-y-0.5" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="top" className="text-xs">
-                  Send message
-                </TooltipContent>
-              </Tooltip>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                disabled={isSending || !isChatHydrated}
+                onClick={toggleVoiceInput}
+                aria-label={isListening ? t.stopVoice : t.startVoice}
+                title={isListening ? 'Stop voice input' : 'Start voice input'}
+                className={cn(
+                  'disabled:bg-muted/40 disabled:text-muted-foreground size-11 rounded-full disabled:opacity-100 md:size-8',
+                  isListening
+                    ? 'text-destructive relative'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-primary/5 group/mic transition-colors duration-200'
+                )}
+              >
+                {isListening && (
+                  <>
+                    <span className="bg-destructive/25 absolute inset-0 animate-[voice-ring_1.5s_ease-out_infinite] rounded-full motion-reduce:animate-none" />
+                    <span className="bg-destructive/15 absolute inset-0 animate-[voice-ring_1.5s_ease-out_0.4s_infinite] rounded-full motion-reduce:animate-none" />
+                  </>
+                )}
+                {isListening ? (
+                  <MicOff className="relative size-4" />
+                ) : (
+                  <Mic className="size-4 transition-transform duration-200 group-hover/mic:scale-110" />
+                )}
+              </Button>
+              <Button
+                size="icon-sm"
+                disabled={!canSend}
+                className="bg-accent text-accent-foreground hover:bg-accent/90 disabled:bg-muted disabled:text-muted-foreground group/send relative size-11 overflow-hidden rounded-full transition-[transform,box-shadow] duration-200 hover:scale-105 hover:shadow-lg active:scale-90 disabled:cursor-not-allowed disabled:opacity-100 disabled:hover:scale-100 disabled:hover:shadow-none md:size-8"
+                onClick={handleSubmit}
+                aria-label={t.sendMessage}
+                title="Send message"
+              >
+                <ArrowUp className="size-4 transition-transform duration-150 group-hover/send:-translate-y-0.5" />
+              </Button>
             </div>
           )}
         </div>

@@ -3,7 +3,6 @@
 import ThemeOptionsDropdown from '@/components/theme/options-dropdown'
 import ThemeToggle from '@/components/theme/toggle'
 import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useAppContext } from '@/contexts/app'
 import type { LawRagLang, LawRagMode } from '@/services/law-rag'
 import { PanelLeft } from 'lucide-react'
@@ -58,27 +57,21 @@ export function Header(): React.JSX.Element {
             aria-label="Режим запроса"
           >
             {MODES.map(({ value, label, title }) => (
-              <Tooltip key={value}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => setLawRagMode(value)}
-                    title={title}
-                    aria-pressed={lawRagMode === value}
-                    className={cn(
-                      'rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150',
-                      lawRagMode === value
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    {label}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  {title}
-                </TooltipContent>
-              </Tooltip>
+              <button
+                key={value}
+                type="button"
+                onClick={() => setLawRagMode(value)}
+                title={title}
+                aria-pressed={lawRagMode === value}
+                className={cn(
+                  'rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150',
+                  lawRagMode === value
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {label}
+              </button>
             ))}
           </div>
 
@@ -89,34 +82,31 @@ export function Header(): React.JSX.Element {
             aria-label="Язык ответа"
           >
             {LANGS.map(({ value, label, title }) => (
-              <Tooltip key={value}>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    onClick={() => setLawRagLang(value)}
-                    title={title}
-                    aria-pressed={lawRagLang === value}
-                    className={cn(
-                      'rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150',
-                      lawRagLang === value
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    {label}
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" className="text-xs">
-                  {title}
-                </TooltipContent>
-              </Tooltip>
+              <button
+                key={value}
+                type="button"
+                onClick={() => setLawRagLang(value)}
+                title={title}
+                aria-pressed={lawRagLang === value}
+                className={cn(
+                  'rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150',
+                  lawRagLang === value
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {label}
+              </button>
             ))}
           </div>
         </div>
 
-        {/* Right: theme controls */}
+        {/* Right: theme controls.
+             ThemeOptionsDropdown is hidden on mobile — accessible via sidebar footer. */}
         <nav className="flex shrink-0 items-center gap-1 sm:gap-2">
-          <ThemeOptionsDropdown />
+          <div className="hidden md:flex items-center gap-1">
+            <ThemeOptionsDropdown />
+          </div>
           <ThemeToggle />
         </nav>
       </div>
