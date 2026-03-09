@@ -5,7 +5,7 @@ This module provides optimized search functionality combining
 vector similarity search with LLM-powered response generation.
 """
 import logging
-from typing import Final, List, Optional
+from typing import Final, List, Optional, Tuple
 
 import confs.config as config
 import databases.milvus_db as milvus_db
@@ -92,8 +92,9 @@ class ProLawRAGSearch:
         self,
         query: str,
         type: str = 'base',
-        lang: str = 'ru'
-    ) -> str:
+        lang: str = 'ru',
+        previous_response_id: Optional[str] = None
+    ) -> Tuple[str, Optional[str]]:
         """
         Get RAG response as text string.
 
@@ -103,9 +104,13 @@ class ProLawRAGSearch:
             query (str): User's question.
             type (str): Response type ('base', 'pro', or 'search'). Defaults to 'base'.
             lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
+            previous_response_id (Optional[str]): ID of the previous LLM response
+                for chat history continuity. Defaults to None.
 
         Returns:
-            str: LLM response text or search results or empty string on error.
+            Tuple[str, Optional[str]]: (response_text, response_id).
+                response_text is empty string on error or no results.
+                response_id is None for search mode or on error.
         """
         try:
             if type == 'pro':
@@ -116,7 +121,7 @@ class ProLawRAGSearch:
                     lang=lang
                 )
                 if not llm_questions:
-                    return ""
+                    return "", None
                 
                 query_vectors = self._embedder.encode_queries(llm_questions)
             else:
@@ -131,31 +136,33 @@ class ProLawRAGSearch:
             )
 
             if not results:
-                return ""
+                return "", None
 
             # Search mode: Return formatted results without LLM
             if type == 'search':
-                return self._format_search_results(results, lang)
+                return self._format_search_results(results, lang), None
 
             # Base/Pro mode: Generate response from LLM
-            response = await self._llm.get_llm_response(
+            text, response_id = await self._llm.get_llm_response(
                 query,
                 results,
-                lang=lang
+                lang=lang,
+                previous_response_id=previous_response_id
             )
-            return response or ""
+            return text or "", response_id
 
         except Exception as e:
             logger.error("Error in get_response_text: %s", e)
-            return ""
+            return "", None
 
     async def get_response_from_doc_text(
         self,
         query: str,
         file_url: str,
         type: str = 'base',
-        lang: str = 'ru'
-    ) -> str:
+        lang: str = 'ru',
+        previous_response_id: Optional[str] = None
+    ) -> Tuple[str, Optional[str]]:
         """
         Get RAG response from document as text string.
 
@@ -167,15 +174,17 @@ class ProLawRAGSearch:
             file_url (str): Direct URL to the PDF document.
             type (str): Response type ('base' or 'pro'). Defaults to 'base'.
             lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
+            previous_response_id (Optional[str]): ID of the previous LLM response
+                for chat history continuity. Defaults to None.
 
         Returns:
-            str: LLM response text or empty string on error.
+            Tuple[str, Optional[str]]: (response_text, response_id).
         """
         try:
             # Extract document data
             doc_data = await self._llm.get_doc_data(file_url)
             if not doc_data:
-                return ""
+                return "", None
 
             # Combine query with document content
             user_input = config.concat_query_and_doc(query, doc_data)
@@ -221,27 +230,29 @@ class ProLawRAGSearch:
                 )
 
             if not results:
-                return ""
+                return "", None
 
             # Generate response from LLM
-            response = await self._llm.get_llm_response(
+            text, response_id = await self._llm.get_llm_response(
                 user_input,
                 results,
-                lang=lang
+                lang=lang,
+                previous_response_id=previous_response_id
             )
-            return response or ""
+            return text or "", response_id
 
         except Exception as e:
             logger.error("Error in get_response_from_doc_text: %s", e)
-            return ""
+            return "", None
 
     async def get_response_from_image_text(
         self,
         query: str,
         image_url: str,
         type: str = 'base',
-        lang: str = 'ru'
-    ) -> str:
+        lang: str = 'ru',
+        previous_response_id: Optional[str] = None
+    ) -> Tuple[str, Optional[str]]:
         """
         Get RAG response from document screenshot/image as text string.
 
@@ -253,15 +264,17 @@ class ProLawRAGSearch:
             image_url (str): Direct URL to the image.
             type (str): Response type ('base' or 'pro'). Defaults to 'base'.
             lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
+            previous_response_id (Optional[str]): ID of the previous LLM response
+                for chat history continuity. Defaults to None.
 
         Returns:
-            str: LLM response text or empty string on error.
+            Tuple[str, Optional[str]]: (response_text, response_id).
         """
         try:
             # Extract document data from image
             doc_data = await self._llm.get_image_data(image_url)
             if not doc_data:
-                return ""
+                return "", None
 
             # Combine query with document content
             user_input = config.concat_query_and_doc(query, doc_data)
@@ -307,19 +320,20 @@ class ProLawRAGSearch:
                 )
 
             if not results:
-                return ""
+                return "", None
 
             # Generate response from LLM
-            response = await self._llm.get_llm_response(
+            text, response_id = await self._llm.get_llm_response(
                 user_input,
                 results,
-                lang=lang
+                lang=lang,
+                previous_response_id=previous_response_id
             )
-            return response or ""
+            return text or "", response_id
 
         except Exception as e:
             logger.error("Error in get_response_from_image_text: %s", e)
-            return ""
+            return "", None
 
     async def get_response(
         self,
@@ -337,7 +351,7 @@ class ProLawRAGSearch:
             type (str): Response type ('base' or 'pro'). Defaults to 'base'.
             lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
         """
-        response = await self.get_response_text(query, type, lang)
+        response, _ = await self.get_response_text(query, type, lang)
         if response:
             print("\nLLM Response:")
             print(response)
@@ -362,7 +376,7 @@ class ProLawRAGSearch:
             type (str): Response type ('base' or 'pro'). Defaults to 'base'.
             lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
         """
-        response = await self.get_response_from_doc_text(
+        response, _ = await self.get_response_from_doc_text(
             query,
             file_url,
             type,

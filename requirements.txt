@@ -22,3 +22,7 @@ python-dotenv>=1.0.0
 
 # Async utilities
 aiofiles>=23.0.0
+
+# FastAPI server
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0

@@ -363,7 +363,7 @@ async def process_text_query(message: Message, state: FSMContext) -> None:
     try:
         user_repository.update_balance(telegram_id, -query_cost)
 
-        response = await get_searcher().get_response_text(
+        response, _ = await get_searcher().get_response_text(
             query=message.text,
             type=response_type,
             lang=lang
@@ -438,7 +438,7 @@ async def process_document(
 
         query = message.caption or get_default_doc_query(lang)
 
-        response = await get_searcher().get_response_from_doc_text(
+        response, _ = await get_searcher().get_response_from_doc_text(
             query=query,
             file_url=file_url,
             type=response_type,
@@ -511,7 +511,7 @@ async def process_image(
 
         query = message.caption or get_default_doc_query(lang)
 
-        response = await get_searcher().get_response_from_image_text(
+        response, _ = await get_searcher().get_response_from_image_text(
             query=query,
             image_url=image_url,
             type=response_type,

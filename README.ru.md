@@ -12,7 +12,9 @@
   - **Базовый** (1 запрос) — быстрый поиск + LLM ответ
   - **Продвинутый** (2 запроса) — расширенный анализ с уточняющими вопросами
   - **Поиск** (1 запрос) — только релевантные статьи без LLM
-- **🌐 Поддержка двух языков**: русский и кыргызский
+- **� REST API (FastAPI)**: все режимы доступны по HTTP со Swagger UI
+- **💬 История чата**: поддержка `previous_response_id` для многоэтапных диалогов
+- **�🌐 Поддержка двух языков**: русский и кыргызский
 - **📄 Анализ документов** с извлечением структурированных данных:
   - PDF файлы через URL (без base64)
   - Изображения/скриншоты документов
@@ -48,8 +50,12 @@ law-rag-system/
 │   └── docx_kg/                 # Киргизские DOCX файлы
 ├── searchers/                    # Логика поиска
 │   └── search.py                # ProLawRAGSearch (RAG pipeline)
+├── api/                          # FastAPI-приложение
+│   ├── __init__.py
+│   └── app.py                   # Эндпоинты: /v1/query, /v1/query/doc, /v1/query/image
 ├── main.py                       # CLI точка входа
 ├── run_bot.py                    # Запуск Telegram-бота
+├── run_api.py                    # Запуск FastAPI-сервера
 ├── law_rag_db.json              # База законов (RU)
 ├── law_rag_db_kg.json           # База законов (KG)
 ├── requirements.txt              # Зависимости
@@ -152,11 +158,103 @@ DB_PORT=3306
 python run_bot.py
 ```
 
+**FastAPI-сервер:**
+```bash
+python run_api.py
+# Swagger UI: http://localhost:8000/docs
+
+# Кастомный хост/порт
+python run_api.py --host 0.0.0.0 --port 8080
+
+# Режим разработки с автоперезагрузкой
+python run_api.py --reload
+```
+
 **CLI тестирование:**
 ```bash
 python main.py
 ```
 ## 📖 Использование
+
+### REST API (FastAPI)
+
+HTTP API предоставляет все режимы поиска и поддерживает историю диалога через `previous_response_id`.
+
+#### Эндпоинты
+
+| Метод | Путь | Описание |
+|--------|------|-------------|
+| `GET` | `/health` | Проверка доступности |
+| `POST` | `/v1/query` | Текстовый запрос (`base` / `pro` / `search`) |
+| `POST` | `/v1/query/doc` | Анализ PDF по URL (`base` / `pro`) |
+| `POST` | `/v1/query/image` | Анализ изображения / скриншота по URL (`base` / `pro`) |
+
+#### Текстовый запрос
+
+```bash
+curl -X POST http://localhost:8000/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Какие права имеет работник при увольнении?",
+    "type": "pro",
+    "lang": "ru"
+  }'
+```
+
+Ответ:
+```json
+{
+  "response": "Согласно статье 83 Трудового кодекса...",
+  "response_id": "resp_abc123",
+  "mode": "pro",
+  "lang": "ru"
+}
+```
+
+#### Многоэтапный диалог (история чата)
+
+Передайте `response_id` из предыдущего ответа как `previous_response_id` в следующем запросе:
+
+```bash
+curl -X POST http://localhost:8000/v1/query \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Какие исключения предусмотрены?",
+    "type": "pro",
+    "lang": "ru",
+    "previous_response_id": "resp_abc123"
+  }'
+```
+
+#### Анализ PDF-документа
+
+```bash
+curl -X POST http://localhost:8000/v1/query/doc \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Легален ли данный договор?",
+    "file_url": "https://example.com/contract.pdf",
+    "type": "base",
+    "lang": "ru"
+  }'
+```
+
+#### Анализ изображения / скана
+
+```bash
+curl -X POST http://localhost:8000/v1/query/image \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "Проверь документ на соответствие законодательству",
+    "image_url": "https://example.com/scan.jpg",
+    "type": "base",
+    "lang": "ru"
+  }'
+```
+
+Интерактивная документация доступна по адресу **http://localhost:8000/docs** (Swagger UI) и **http://localhost:8000/redoc**.
+
+---
 
 ### Telegram-бот
 
@@ -179,7 +277,7 @@ python main.py
   - Базовый режим: 3 запроса
   - Продвинутый режим: 9 запросов
 
-### Программный API
+### Программный API (Python)
 
 ```python
 from searchers.search import ProLawRAGSearch
@@ -188,31 +286,37 @@ import asyncio
 # Создание экземпляра (singleton-компоненты переиспользуются)
 searcher = ProLawRAGSearch(top_k=3, n_llm_questions=3)
 
-# Текстовый запрос
-response = asyncio.run(searcher.get_response_text(
+# Текстовый запрос — возвращает (text, response_id)
+text, response_id = asyncio.run(searcher.get_response_text(
     query="Какие права имеет работник при увольнении?",
-    type='pro',     # 'base', 'pro', или 'search'
-    lang='ru'       # 'ru' или 'kg'
+    type='pro',                    # 'base', 'pro', или 'search'
+    lang='ru',                     # 'ru' или 'kg'
+    previous_response_id=None      # передайте response_id для продолжения диалога
 ))
 
-# Анализ PDF документа (через URL)
-file_url = "https://api.telegram.org/file/bot<TOKEN>/<file_path>"
-response = asyncio.run(searcher.get_response_from_doc_text(
+# Продолжение диалога
+text2, response_id2 = asyncio.run(searcher.get_response_text(
+    query="Какие исключения предусмотрены?",
+    type='pro',
+    lang='ru',
+    previous_response_id=response_id   # передаём response_id предыдущего ответа
+))
+
+# Анализ PDF-документа (через URL)
+text, response_id = asyncio.run(searcher.get_response_from_doc_text(
     query="Законен ли данный документ?",
-    file_url=file_url,
+    file_url="https://example.com/document.pdf",
     type='pro',
     lang='ru'
 ))
 
 # Анализ изображения документа
-image_url = "https://api.telegram.org/file/bot<TOKEN>/<file_path>"
-response = asyncio.run(searcher.get_response_from_image_text(
+text, response_id = asyncio.run(searcher.get_response_from_image_text(
     query="Проанализируй этот документ",
-    image_url=image_url,
+    image_url="https://example.com/scan.jpg",
     type='base',
     lang='ru'
 ))
-
 ```
 
 ## ⚡ Оптимизации производительности
@@ -317,7 +421,13 @@ python -m databases.milvus_init --from-json \
 | Модуль | Описание |
 |--------|----------|
 | `embedder.py` | Singleton-эмбеддер на базе `google/embeddinggemma-300m`, кэширование, batch processing |
-| `llm.py` | Azure OpenAI клиент с responses API (`responses.parse`, `responses.create`). Поддержка файлов/изображений через URL |
+| `llm.py` | Azure OpenAI клиент с responses API (`responses.parse`, `responses.create`). Поддержка файлов/изображений через URL. Возвращает `(text, response_id)` для поддержки истории чата. |
+
+### FastAPI (`api/`)
+
+| Модуль | Описание |
+|--------|----------|
+| `app.py` | FastAPI-приложение. Три эндпоинта: `/v1/query`, `/v1/query/doc`, `/v1/query/image`. Полная поддержка `previous_response_id`. Swagger UI по адресу `/docs`. |
 
 ### Telegram-бот (`bot/`)
 
@@ -416,6 +526,8 @@ mysql-connector-python  # MySQL
 aiogram>=3.3.0          # Telegram-бот
 python-dotenv           # Переменные окружения
 aiofiles                # Async файловые операции
+fastapi>=0.110.0        # REST API фреймворк
+uvicorn[standard]>=0.29.0  # ASGI-сервер
 ```
 
 ## 🐛 Устранение неполадок
@@ -576,10 +688,11 @@ response2 = openai.responses.create(
 - [x] LRU-кэширование
 - [x] Дедупликация результатов
 - [x] ООП-парсер документов
+- [x] **REST API (FastAPI) со всеми режимами поиска**
+- [x] **История чата через `previous_response_id`**
 - [ ] **Автоматизированный пайплайн ежедневных обновлений законов** 🚧
 - [ ] **Память бота с Conversations API** 🚧
 - [ ] Redis для кэширования ответов
-- [ ] Web интерфейс (FastAPI)
 - [ ] Поддержка DOCX документов
 - [ ] A/B тестирование моделей
 - [ ] Статистика использования режимов

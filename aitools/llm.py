@@ -5,7 +5,7 @@ This module provides an optimized wrapper for Azure OpenAI API calls
 using the new responses API. Includes connection pooling and error handling.
 """
 import logging
-from typing import Any, Final, List, Optional
+from typing import Any, Final, List, Optional, Tuple
 
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel
@@ -140,20 +140,25 @@ class LLMHelper:
         self,
         user_query: str,
         top_results: List[Any],
-        lang: str = 'ru'
-    ) -> Optional[str]:
+        lang: str = 'ru',
+        previous_response_id: Optional[str] = None
+    ) -> Tuple[Optional[str], Optional[str]]:
         """
         Generate detailed response based on relevant law articles.
         
         Builds context from search results and generates comprehensive answer.
+        Supports conversation history via previous_response_id (OpenAI Responses API).
 
         Parameters:
             user_query (str): The user's original question.
             top_results (List[Any]): List of relevant articles with 'path' and 'text'.
             lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
+            previous_response_id (Optional[str]): ID of the previous response for
+                chat history continuity. Defaults to None.
 
         Returns:
-            Optional[str]: Generated response text or None on error.
+            Tuple[Optional[str], Optional[str]]: (output_text, response_id) or
+                (None, None) on error.
         """
         # Build context efficiently using join
         context_parts = [
@@ -169,15 +174,19 @@ class LLMHelper:
         )
         
         try:
-            response = await self.nano_client.responses.create(
+            kwargs: dict = dict(
                 model=config.AZURE_DEPLOYMENT_NANO,
                 instructions=LEGAL_ASSISTANT_INSTRUCTION,
                 input=prompt
             )
-            return response.output_text
+            if previous_response_id:
+                kwargs["previous_response_id"] = previous_response_id
+
+            response = await self.nano_client.responses.create(**kwargs)
+            return response.output_text, response.id
         except Exception as e:
             logger.error("Error getting LLM response: %s", e)
-            return None
+            return None, None
         
     async def get_doc_data(
         self,
