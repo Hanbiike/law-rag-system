@@ -5,7 +5,7 @@ This module provides an optimized wrapper for Azure OpenAI API calls
 using the new responses API. Includes connection pooling and error handling.
 """
 import logging
-from typing import Any, Final, List, Optional, Tuple
+from typing import Any, AsyncGenerator, Final, List, Optional, Tuple
 
 from openai import AsyncAzureOpenAI
 from pydantic import BaseModel
@@ -187,6 +187,63 @@ class LLMHelper:
         except Exception as e:
             logger.error("Error getting LLM response: %s", e)
             return None, None
+
+    async def stream_llm_response(
+        self,
+        user_query: str,
+        top_results: List[Any],
+        lang: str = 'ru',
+        previous_response_id: Optional[str] = None
+    ) -> AsyncGenerator[dict, None]:
+        """
+        Stream LLM response token by token using Server-Sent Events format.
+
+        Yields delta dicts while the model generates, then a final 'done' dict
+        with the response_id for chat history continuity.
+
+        Parameters:
+            user_query (str): The user's original question.
+            top_results (List[Any]): List of relevant articles with 'path' and 'text'.
+            lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
+            previous_response_id (Optional[str]): ID of the previous response for
+                chat history continuity. Defaults to None.
+
+        Yields:
+            dict: One of:
+                {"type": "delta",  "content": "<token>"}
+                {"type": "done",   "response_id": "<id>"}
+                {"type": "error",  "message": "<msg>"}
+        """
+        context_parts = [
+            f"Source: {result['path']}\nText: {result['text']}"
+            for result in top_results
+        ]
+        context = "\n\n".join(context_parts)
+
+        prompt = config.get_response_prompt(
+            user_query=user_query,
+            context=context,
+            lang=lang
+        )
+
+        kwargs: dict = dict(
+            model=config.AZURE_DEPLOYMENT_NANO,
+            instructions=LEGAL_ASSISTANT_INSTRUCTION,
+            input=prompt
+        )
+        if previous_response_id:
+            kwargs["previous_response_id"] = previous_response_id
+
+        try:
+            async with self.nano_client.responses.stream(**kwargs) as stream:
+                async for event in stream:
+                    if event.type == "response.output_text.delta":
+                        yield {"type": "delta", "content": event.delta}
+                final = await stream.get_final_response()
+                yield {"type": "done", "response_id": final.id}
+        except Exception as e:
+            logger.error("Error streaming LLM response: %s", e)
+            yield {"type": "error", "message": str(e)}
         
     async def get_doc_data(
         self,

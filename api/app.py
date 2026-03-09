@@ -10,11 +10,13 @@ Endpoints:
     POST /v1/query/doc     — PDF document query (by URL)
     POST /v1/query/image   — image / screenshot query (by URL)
 """
+import json
 import logging
-from typing import Literal, Optional
+from typing import AsyncGenerator, Literal, Optional
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, HttpUrl
 
 from searchers.search import ProLawRAGSearch
@@ -177,6 +179,26 @@ class HealthResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# SSE helpers
+# ---------------------------------------------------------------------------
+
+async def _to_sse(gen: AsyncGenerator[dict, None]) -> AsyncGenerator[str, None]:
+    """
+    Wrap a dict-yielding async generator into SSE format.
+
+    Each event is serialised as::
+
+        data: {"type": "delta", "content": "..."}
+
+        data: {"type": "done",  "response_id": "resp_xxx"}
+
+    An 'error' event is also forwarded as-is so the client can handle it.
+    """
+    async for chunk in gen:
+        yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -190,6 +212,48 @@ class HealthResponse(BaseModel):
 async def health() -> HealthResponse:
     """Return 200 OK when the service is running."""
     return HealthResponse(status="ok")
+
+
+@app.post(
+    "/v1/query/stream",
+    summary="Текстовый запрос — стриминг (SSE)",
+    tags=["Streaming"],
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Server-Sent Events stream",
+            "content": {"text/event-stream": {}},
+        }
+    },
+)
+async def query_text_stream(req: QueryRequest) -> StreamingResponse:
+    """
+    Потоковая передача ответа токен за токеном (Server-Sent Events).
+
+    Формат каждого события:
+
+        data: {"type": "delta",  "content": "<токен>"}\n\n
+        data: {"type": "done",   "response_id": "<id>"}\n\n
+        data: {"type": "error",  "message": "<текст>"}\n\n
+
+    Для продолжения диалога сохраните `response_id` из события `done`
+    и передайте его в следующем запросе как `previous_response_id`.
+    """
+    logger.info(
+        "POST /v1/query/stream type=%s lang=%s prev=%s",
+        req.type, req.lang, req.previous_response_id,
+    )
+    gen = get_searcher().stream_response_text(
+        query=req.query,
+        type=req.type,
+        lang=req.lang,
+        previous_response_id=req.previous_response_id,
+    )
+    return StreamingResponse(
+        _to_sse(gen),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post(
@@ -228,6 +292,43 @@ async def query_text(req: QueryRequest) -> RAGResponse:
 
 
 @app.post(
+    "/v1/query/doc/stream",
+    summary="Анализ PDF-документа — стриминг (SSE)",
+    tags=["Streaming"],
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Server-Sent Events stream",
+            "content": {"text/event-stream": {}},
+        }
+    },
+)
+async def query_doc_stream(req: DocQueryRequest) -> StreamingResponse:
+    """
+    Потоковый анализ PDF-документа (SSE).
+
+    Этапы извлечения текста и векторного поиска выполняются синхронно.
+    Как только контекст собран — ответ LLM стримится токен за токеном.
+    """
+    logger.info(
+        "POST /v1/query/doc/stream type=%s lang=%s prev=%s",
+        req.type, req.lang, req.previous_response_id,
+    )
+    gen = get_searcher().stream_response_from_doc_text(
+        query=req.query,
+        file_url=req.file_url,
+        type=req.type,
+        lang=req.lang,
+        previous_response_id=req.previous_response_id,
+    )
+    return StreamingResponse(
+        _to_sse(gen),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post(
     "/v1/query/doc",
     response_model=RAGResponse,
     summary="Анализ PDF-документа",
@@ -260,6 +361,43 @@ async def query_doc(req: DocQueryRequest) -> RAGResponse:
         )
 
     return RAGResponse(response=text, response_id=response_id, mode=req.type, lang=req.lang)
+
+
+@app.post(
+    "/v1/query/image/stream",
+    summary="Анализ изображения документа — стриминг (SSE)",
+    tags=["Streaming"],
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "description": "Server-Sent Events stream",
+            "content": {"text/event-stream": {}},
+        }
+    },
+)
+async def query_image_stream(req: ImageQueryRequest) -> StreamingResponse:
+    """
+    Потоковый анализ скана / скриншота документа (SSE).
+
+    Этапы извлечения текста из изображения и векторного поиска выполняются
+    синхронно. Ответ LLM стримится токен за токеном.
+    """
+    logger.info(
+        "POST /v1/query/image/stream type=%s lang=%s prev=%s",
+        req.type, req.lang, req.previous_response_id,
+    )
+    gen = get_searcher().stream_response_from_image_text(
+        query=req.query,
+        image_url=req.image_url,
+        type=req.type,
+        lang=req.lang,
+        previous_response_id=req.previous_response_id,
+    )
+    return StreamingResponse(
+        _to_sse(gen),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.post(

@@ -1,0 +1,11 @@
+.next
+node_modules
+src/components/ui
+
+*.md
+*.json
+
+src/app/globals.css
+eslint.config.mjs
+next.config.ts
+postcss.config.mjs
