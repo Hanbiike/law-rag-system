@@ -113,20 +113,32 @@ class ProLawRAGSearch:
                 response_id is None for search mode or on error.
         """
         try:
-            if type == 'pro':
-                # Pro mode: Generate clarifying questions first
-                llm_questions = await self._llm.get_llm_questions(
-                    query,
-                    self._n_llm_questions,
-                    lang=lang
-                )
-                if not llm_questions:
-                    return "", None
-                
-                query_vectors = self._embedder.encode_queries(llm_questions)
-            else:
-                # Base and Search modes: Direct query encoding
+            if type == 'search':
+                # Search mode: Direct query encoding, no LLM pre-processing
                 query_vectors = self._embedder.encode_queries([query])
+            else:
+                # Base mode: 1 expanded query; Pro mode: n queries.
+                # A single structured-output call decides whether RAG is
+                # needed at all and returns the expanded search questions.
+                n = 1 if type == 'base' else self._n_llm_questions
+                decision = await self._llm.get_rag_decision(
+                    query, n_questions=n, lang=lang
+                )
+                if not decision:
+                    return "", None
+
+                if not decision.is_rag_needed:
+                    # No RAG needed — answer directly without vector search
+                    return await self._llm.get_llm_direct_response(
+                        query,
+                        lang=lang,
+                        previous_response_id=previous_response_id
+                    )
+
+                search_questions = [q.question for q in decision.questions]
+                if not search_questions:
+                    return "", None
+                query_vectors = self._embedder.encode_queries(search_questions)
 
             # Search for relevant laws
             results = self._milvus.search_similar_laws(
@@ -365,16 +377,37 @@ class ProLawRAGSearch:
                   {"type": "error", "message": str}
         """
         try:
-            if type == 'pro':
-                llm_questions = await self._llm.get_llm_questions(
-                    query, self._n_llm_questions, lang=lang
-                )
-                if not llm_questions:
-                    yield {"type": "error", "message": "Failed to generate search queries"}
-                    return
-                query_vectors = self._embedder.encode_queries(llm_questions)
-            else:
+            if type == 'search':
+                # Search mode: Direct query encoding, no LLM pre-processing
                 query_vectors = self._embedder.encode_queries([query])
+            else:
+                # Base mode: 1 expanded query; Pro mode: n queries.
+                # A single structured-output call decides whether RAG is
+                # needed at all and returns the expanded search questions.
+                n = 1 if type == 'base' else self._n_llm_questions
+                decision = await self._llm.get_rag_decision(
+                    query, n_questions=n, lang=lang
+                )
+                if not decision:
+                    yield {"type": "error", "message": "Failed to evaluate query"}
+                    return
+
+                if not decision.is_rag_needed:
+                    # No RAG needed — stream answer directly without
+                    # touching the vector DB
+                    async for chunk in self._llm.stream_llm_direct_response(
+                        query,
+                        lang=lang,
+                        previous_response_id=previous_response_id
+                    ):
+                        yield chunk
+                    return
+
+                search_questions = [q.question for q in decision.questions]
+                if not search_questions:
+                    yield {"type": "error", "message": "No search queries generated"}
+                    return
+                query_vectors = self._embedder.encode_queries(search_questions)
 
             results = self._milvus.search_similar_laws(
                 query_vectors, top_k=self._top_k, lang=lang

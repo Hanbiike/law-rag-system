@@ -41,6 +41,20 @@ class Queries(BaseModel):
     questions: List[Query]
 
 
+class RAGDecision(BaseModel):
+    """
+    Structured output for RAG routing decision with query expansion.
+
+    The LLM populates this model before any vector search is performed:
+    * ``is_rag_needed`` – whether to query the law database at all.
+    * ``questions``     – expanded search queries (1 for base mode, n
+                          for pro mode); empty when RAG is not needed.
+    """
+
+    is_rag_needed: bool
+    questions: List[Query]
+
+
 class docQuery(BaseModel):
     """Model representing a single document paragraph."""
     
@@ -135,6 +149,131 @@ class LLMHelper:
         except Exception as e:
             logger.error("Error generating LLM questions: %s", e)
             return None
+
+    async def get_rag_decision(
+        self,
+        user_query: str,
+        n_questions: int = 1,
+        lang: str = 'ru'
+    ) -> Optional[RAGDecision]:
+        """
+        Decide whether RAG is needed and generate search queries in one call.
+
+        Combines routing and query expansion into a single structured-output
+        request so the system avoids unnecessary vector searches for greetings
+        or off-topic messages.
+
+        Parameters:
+            user_query (str): The user's original question.
+            n_questions (int): How many search queries to generate (1 for base,
+                n for pro mode). Defaults to 1.
+            lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
+
+        Returns:
+            Optional[RAGDecision]: Decision with ``is_rag_needed`` flag and
+                expanded ``questions``, or None on error.
+        """
+        prompt = config.get_rag_decision_prompt(
+            user_query=user_query,
+            n_questions=n_questions,
+            lang=lang
+        )
+        try:
+            response = await self.nano_client.responses.parse(
+                model=config.AZURE_DEPLOYMENT_NANO,
+                instructions=LEGAL_ASSISTANT_INSTRUCTION,
+                input=prompt,
+                text_format=RAGDecision
+            )
+            return response.output_parsed
+        except Exception as e:
+            logger.error("Error in get_rag_decision: %s", e)
+            return None
+
+    async def get_llm_direct_response(
+        self,
+        user_query: str,
+        lang: str = 'ru',
+        previous_response_id: Optional[str] = None
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Generate a direct LLM answer when RAG search is not needed.
+
+        Used for greetings, off-topic messages, or general questions that
+        don't require referencing specific law articles.
+
+        Parameters:
+            user_query (str): The user's original question.
+            lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
+            previous_response_id (Optional[str]): ID of the previous response
+                for chat history continuity. Defaults to None.
+
+        Returns:
+            Tuple[Optional[str], Optional[str]]: (output_text, response_id)
+                or (None, None) on error.
+        """
+        prompt = config.get_direct_response_prompt(
+            user_query=user_query, lang=lang
+        )
+        try:
+            kwargs: dict = dict(
+                model=config.AZURE_DEPLOYMENT_NANO,
+                instructions=LEGAL_ASSISTANT_INSTRUCTION,
+                input=prompt
+            )
+            if previous_response_id:
+                kwargs["previous_response_id"] = previous_response_id
+
+            response = await self.nano_client.responses.create(**kwargs)
+            return response.output_text, response.id
+        except Exception as e:
+            logger.error("Error in get_llm_direct_response: %s", e)
+            return None, None
+
+    async def stream_llm_direct_response(
+        self,
+        user_query: str,
+        lang: str = 'ru',
+        previous_response_id: Optional[str] = None
+    ) -> AsyncGenerator[dict, None]:
+        """
+        Stream a direct LLM answer when RAG search is not needed.
+
+        Yields the same delta/done/error dict format as
+        ``stream_llm_response`` for transparent use in streaming paths.
+
+        Parameters:
+            user_query (str): The user's original question.
+            lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
+            previous_response_id (Optional[str]): Previous response ID for
+                chat history continuity. Defaults to None.
+
+        Yields:
+            dict: {"type": "delta",  "content": "<token>"} |
+                  {"type": "done",   "response_id": "<id>"}  |
+                  {"type": "error",  "message": "<msg>"}
+        """
+        prompt = config.get_direct_response_prompt(
+            user_query=user_query, lang=lang
+        )
+        kwargs: dict = dict(
+            model=config.AZURE_DEPLOYMENT_NANO,
+            instructions=LEGAL_ASSISTANT_INSTRUCTION,
+            input=prompt
+        )
+        if previous_response_id:
+            kwargs["previous_response_id"] = previous_response_id
+
+        try:
+            async with self.nano_client.responses.stream(**kwargs) as stream:
+                async for event in stream:
+                    if event.type == "response.output_text.delta":
+                        yield {"type": "delta", "content": event.delta}
+                final = await stream.get_final_response()
+                yield {"type": "done", "response_id": final.id}
+        except Exception as e:
+            logger.error("Error in stream_llm_direct_response: %s", e)
+            yield {"type": "error", "message": str(e)}
 
     async def get_llm_response(
         self,

@@ -78,6 +78,49 @@ _RESPONSE_PROMPTS: Final[Dict[str, str]] = {
     )
 }
 
+# Prompt for RAG routing decision + query expansion in one structured call.
+# LLM decides whether vector search is needed and generates search queries.
+_RAG_DECISION_PROMPTS: Final[Dict[str, str]] = {
+    'ru': (
+        "Определи, нужен ли поиск по базе данных законов для ответа "
+        "на вопрос пользователя.\n"
+        "Поиск нужен, если вопрос касается конкретных статей закона, "
+        "прав, обязанностей, процедур или нормативных актов.\n"
+        "Поиск НЕ нужен, если вопрос является приветствием, светской "
+        "беседой или полностью не связан с законодательством.\n\n"
+        "Если поиск нужен, составь {n_questions} поисковых "
+        "запрос(а/ов) для RAG базы данных по законам Кыргызстана, "
+        "чтобы охватить наиболее релевантные статьи.\n"
+        "Если поиск не нужен, оставь список вопросов пустым.\n\n"
+        "Вопрос пользователя: {user_query}"
+    ),
+    'kg': (
+        "Колдонуучунун суроосуна жооп берүү үчүн мыйзамдар "
+        "базасынан издөө керекпи же жокпу аныкта.\n"
+        "Эгер суроо конкреттүү мыйзам беренелерин, укуктарды, "
+        "милдеттерди же жол-жоболорду талап кылса — издөө керек.\n"
+        "Эгер суроо саламдашуу, жалпы маек же мыйзам менен "
+        "байланышы жок болсо — издөө керек эмес.\n\n"
+        "Эгер издөө керек болсо, Кыргызстан мыйзамдары боюнча "
+        "RAG маалымат базасы үчүн {n_questions} издөө "
+        "сурамжыларын түз.\n"
+        "Эгер издөө керек эмес болсо, суроолор тизмесин бош калтыр.\n\n"
+        "Колдонуучунун суроосу: {user_query}"
+    )
+}
+
+# Prompt for direct LLM response when RAG is not needed.
+_DIRECT_RESPONSE_PROMPTS: Final[Dict[str, str]] = {
+    'ru': (
+        "Ответь на вопрос пользователя как юридический ассистент.\n\n"
+        "Вопрос: {user_query}"
+    ),
+    'kg': (
+        "Колдонуучунун суроосуна юридикалык жардамчы катары жооп бер.\n\n"
+        "Суроо: {user_query}"
+    )
+}
+
 
 @lru_cache(maxsize=128)
 def get_questions_prompt(user_query: str, lang: str = 'ru') -> str:
@@ -94,6 +137,52 @@ def get_questions_prompt(user_query: str, lang: str = 'ru') -> str:
         str: Formatted prompt string for the LLM.
     """
     template = _QUESTIONS_PROMPTS.get(lang, _QUESTIONS_PROMPTS['ru'])
+    return template.format(user_query=user_query)
+
+
+@lru_cache(maxsize=128)
+def get_rag_decision_prompt(
+    user_query: str,
+    n_questions: int = 1,
+    lang: str = 'ru'
+) -> str:
+    """
+    Generate a prompt for RAG routing decision + query expansion.
+
+    The LLM will return a structured ``RAGDecision`` with
+    ``is_rag_needed`` and a list of ``questions`` (1 for base,
+    n for pro mode).  LRU-cached because the same query may arrive
+    multiple times.
+
+    Parameters:
+        user_query (str): The user's original question.
+        n_questions (int): How many search queries to generate. Defaults to 1.
+        lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
+
+    Returns:
+        str: Formatted prompt string for the LLM.
+    """
+    template = _RAG_DECISION_PROMPTS.get(lang, _RAG_DECISION_PROMPTS['ru'])
+    return template.format(user_query=user_query, n_questions=n_questions)
+
+
+def get_direct_response_prompt(user_query: str, lang: str = 'ru') -> str:
+    """
+    Generate a prompt for a direct LLM answer when RAG is not needed.
+
+    Not cached because it's only called for non-law queries which are
+    unlikely to repeat.
+
+    Parameters:
+        user_query (str): The user's original question.
+        lang (str): Language code ('ru' or 'kg'). Defaults to 'ru'.
+
+    Returns:
+        str: Formatted prompt string for the LLM.
+    """
+    template = _DIRECT_RESPONSE_PROMPTS.get(
+        lang, _DIRECT_RESPONSE_PROMPTS['ru']
+    )
     return template.format(user_query=user_query)
 
 

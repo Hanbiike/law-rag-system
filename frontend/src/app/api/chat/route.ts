@@ -13,6 +13,9 @@ import {
 } from '@/services/law-rag'
 
 export const runtime = 'edge'
+// Maximum wall-clock seconds Next.js will allow this route to run.
+// pro mode: get_rag_decision + embed + Milvus + LLM stream can take ~2–3 min.
+export const maxDuration = 180
 
 // ─── Input types ────────────────────────────────────────────────────────────
 
@@ -124,10 +127,13 @@ export async function POST(req: NextRequest): Promise<Response> {
     // Detect whether the user is referencing a file URL
     const fileAttachment = detectFileAttachment(baseQuery, explicitFileUrl)
 
-    // Construct request signal: abort on client disconnect or after 60s timeout
+    // Construct request signal: abort on client disconnect or after timeout.
+    // pro mode runs get_rag_decision + embed + Milvus + LLM before the first
+    // token arrives, so it needs a longer budget than base/search.
+    const TIMEOUT_MS = mode === 'pro' ? 180_000 : 90_000
     const controller = new AbortController()
     req.signal.addEventListener('abort', () => controller.abort(), { once: true })
-    const timeoutId = setTimeout(() => controller.abort(), 60_000)
+    const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS)
 
     // For search mode: context comes from manually injected history in fullQuery,
     // so previous_response_id must be null to avoid double-counting.
@@ -207,7 +213,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             (err.name === 'AbortError' || message.toLowerCase().includes('timeout'))
 
           const userMessage = isTimeout
-            ? 'Запрос занял слишком много времени. Попробуйте режим base.'
+            ? `Запрос занял слишком много времени (>${mode === 'pro' ? 180 : 90}с). Попробуйте режим base или повторите запрос.`
             : message.startsWith('Не удалось')
               ? message
               : `Сервер недоступен. Проверьте подключение. (${message})`
