@@ -668,77 +668,6 @@ flowchart LR
 - 🔄 Zero-downtime updates
 - 🌐 Multi-language support (RU/KG)
 
-## 🧠 Bot Memory with Conversations API (In Development)
-
-### Persistent Context Across Sessions
-
-Implementation of OpenAI's Conversations API for maintaining conversation state:
-
-```mermaid
-flowchart TD
-    A["User starts<br/>conversation"] --> B{"Conversation<br/>exists?"}
-    
-    B -->|No| C["Create new<br/>Conversation object"]
-    B -->|Yes| D["Load<br/>existing conversation"]
-    
-    C --> E["Save conversation_id<br/>in user DB"]
-    D --> E
-    
-    style A fill:#e1f5ff
-    style C fill:#fff9c4
-```
-
-**Features:**
-- 💾 **Persistent conversation state** across sessions and devices
-- 🔄 **Long-running conversation objects** with durable identifiers
-- 📝 **Automatic context management** - no need to chain messages manually
-- 🎯 **Multi-turn interactions** with full conversation history
-- 📱 **Cross-device continuity** - resume conversations anywhere
-- 🗂️ **Conversation items storage** - messages, tool calls, outputs
-- ⚡ **Efficient context handling** - managed by OpenAI's infrastructure
-
-**API Integration:**
-```python
-# Create a new conversation
-conversation = openai.conversations.create()
-
-# Use in subsequent responses
-response = openai.responses.create(
-    model="gpt-4.1",
-    input=[{"role": "user", "content": "Что такое медиация?"}],
-    conversation=conversation.id
-)
-
-# Continue the conversation
-response2 = openai.responses.create(
-    model="gpt-4.1",
-    input=[{"role": "user", "content": "Какие статьи регулируют это?"}],
-    conversation=conversation.id  # Same conversation ID
-)
-```
-
-### Why Not `previous_response_id`?
-
-**The Problem with Response Chaining:**
-
-![Context Window Problem](https://github.com/Hanbiike/law-rag-system/blob/main/context-window.png?raw=true)
-
-**⚠️ Critical Billing Issue:**
-
-**Even when using `previous_response_id`, all previous input tokens for responses in the chain are billed as input tokens in the API.**
-
-This leads to:
-- 📈 **Exponential token cost growth** with each turn
-- 💰 **Higher API bills** for multi-turn conversations
-- 🔄 **Redundant context re-processing** on every request
-- ⏱️ **Slower response times** due to larger context windows
-
-**Solution: Conversations API**
-- ✅ Context managed by OpenAI infrastructure
-- ✅ Pay only for new tokens, not entire history
-- ✅ Efficient state management
-- ✅ Scalable for long conversations
-
 ## 🗺 Roadmap
 
 - [x] Telegram bot with FSM
@@ -752,7 +681,6 @@ This leads to:
 - [x] **FastAPI REST API with all search modes**
 - [x] **Chat history via `previous_response_id`**
 - [ ] **Automated daily legal updates pipeline** 🚧
-- [ ] **Bot memory with Conversations API** 🚧
 - [ ] Redis for response caching
 - [ ] DOCX document support
 - [ ] A/B testing of models
@@ -783,6 +711,7 @@ See [LICENSE](LICENSE) for the full license text.
 
 ## 🙏 Acknowledgments
 
+- [blrchen/chatgpt-lite](https://github.com/blrchen/chatgpt-lite) — frontend foundation for the web interface
 - Azure OpenAI — LLM models
 - Milvus — vector database
 - SentenceTransformers — embeddings

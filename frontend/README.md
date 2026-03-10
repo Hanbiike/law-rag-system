@@ -116,6 +116,7 @@ In the repository root, these values are typically configured through
 
 ## Acknowledgments
 
+- [blrchen/chatgpt-lite](https://github.com/blrchen/chatgpt-lite) — the original frontend project this interface is based on
 - Theme configurations from [tweakcn](https://github.com/jnsahaj/tweakcn)
 
 ## Contribution
