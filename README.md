@@ -12,9 +12,11 @@ A high-performance Retrieval-Augmented Generation (RAG) system for searching leg
   - **Basic** (1 request) — fast search + LLM answer
   - **Advanced** (2 requests) — extended analysis with clarifying questions
   - **Search** (1 request) — only relevant articles without LLM
-- **� REST API (FastAPI)**: all modes available over HTTP with Swagger UI
+- **🌐 Web frontend (Next.js 16)** with streaming chat, file analysis, themes, and voice mode
+- **🧩 REST API (FastAPI)**: all modes available over HTTP with Swagger UI
+- **🚀 Unified launcher**: `run_service.py` starts backend + frontend in both dev and prod modes
 - **💬 Chat history**: `previous_response_id` support for multi-turn conversations
-- **�🌐 Bilingual support**: Russian and Kyrgyz
+- **🌐 Bilingual support**: Russian and Kyrgyz
 - **📄 Document analysis** with structured data extraction:
   - PDF files via URL (no base64)
   - Images/screenshots of documents
@@ -53,18 +55,30 @@ law-rag-system/
 ├── api/                          # FastAPI application
 │   ├── __init__.py
 │   └── app.py                   # Endpoints: /v1/query, /v1/query/doc, /v1/query/image
+├── frontend/                     # Next.js web frontend
+│   ├── src/app/                 # App Router pages and API routes
+│   ├── src/components/          # Chat UI, markdown, themes, voice chat
+│   └── package.json             # Frontend dependencies and scripts
 ├── main.py                       # CLI entry point
 ├── run_bot.py                    # Telegram bot launcher
 ├── run_api.py                    # FastAPI server launcher
+├── run_service.py                # Unified backend + frontend launcher
 ├── law_rag_db.json              # Law database (RU)
 ├── law_rag_db_kg.json           # Law database (KG)
+├── .env.example                  # Full environment variable template
 ├── requirements.txt              # Dependencies
 └── .env                          # Environment variables
 ```
 
 ## 🚀 Quick Start
 
-### 1. Clone and Setup
+### 1. Clone and install dependencies
+
+Requirements:
+
+- Python 3.10+
+- Node.js 20+
+- npm 10+
 
 ```bash
 git clone https://github.com/Hanbiike/law-rag-system.git
@@ -72,12 +86,29 @@ cd law-rag-system
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+cd frontend
+npm install
+cd ..
 ```
 
-### 2. Configure `.env`
+If you only need the backend or Telegram bot, the frontend installation step can be skipped.
+
+### 2. Create `.env` from `.env.example`
+
+```bash
+cp .env.example .env
+```
+
+The repository now includes a complete [.env.example](.env.example) file. The most important variables are:
 
 ```env
-# Azure OpenAI Nano (used for all requests)
+# Azure OpenAI primary deployment
+AZURE_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_KEY=your_primary_api_key
+AZURE_DEPLOYMENT=your_primary_deployment
+AZURE_API_VERSION=2025-03-01-preview
+
+# Azure OpenAI Nano (routing / query expansion)
 AZURE_ENDPOINT_NANO=https://your-endpoint.openai.azure.com/
 AZURE_OPENAI_API_KEY_NANO=your_api_key
 AZURE_DEPLOYMENT_NANO=your_deployment_name
@@ -91,7 +122,15 @@ DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=root
 DB_NAME=law_rag_users
-DB_PORT=8889
+DB_PORT=3306
+
+# Local servers
+API_HOST=0.0.0.0
+API_PORT=8000
+API_WORKERS=1
+FRONTEND_PORT=3000
+LAW_RAG_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_DEFAULT_THEME=
 ```
 
 ### 3. Setup MySQL Database
@@ -153,12 +192,32 @@ DB_PORT=3306
 
 ### 4. Launch
 
+**Recommended: start backend + frontend together**
+```bash
+python run_service.py
+
+# Frontend:  http://localhost:3000
+# Backend:   http://localhost:8000/docs
+
+# Production mode (builds frontend and runs standalone server)
+python run_service.py --mode prod
+
+# Only frontend or only backend
+python run_service.py --no-backend
+python run_service.py --no-frontend
+
+# Custom ports
+python run_service.py --frontend-port 3001 --api-port 8080
+```
+
+Development mode uses `next dev --webpack` for the frontend. Production mode builds the Next.js app and launches the standalone server, while automatically preparing the required static assets.
+
 **Telegram bot:**
 ```bash
 python run_bot.py
 ```
 
-**FastAPI server:**
+**FastAPI server only:**
 ```bash
 python run_api.py
 # Swagger UI: http://localhost:8000/docs
@@ -538,6 +597,9 @@ uvicorn[standard]>=0.29.0  # ASGI server
 | `CUDA out of memory` | Model automatically switches to CPU |
 | Low quality | Increase `top_k`, use `pro` mode |
 | Mode not saving | Check that DB supports `'search'` in `response_type` |
+| `EADDRINUSE` on startup | Change ports with `--frontend-port` / `--api-port` or stop the conflicting process |
+| Frontend works in dev but looks broken in prod | Start it with `python run_service.py --mode prod`; the script prepares Next.js standalone static assets automatically |
+| `Can't resolve 'tailwindcss'` in frontend dev mode | Start the app via `python run_service.py` or run the frontend with `next dev --webpack` |
 
 ## 📊 Performance
 

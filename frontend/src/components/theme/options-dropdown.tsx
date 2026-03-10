@@ -85,7 +85,7 @@ export default function ThemeOptionsDropdown(): React.JSX.Element | null {
       return
     }
 
-    const handleClick = (event: MouseEvent) => {
+    const handleClick = (event: MouseEvent | TouchEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         closeDropdown()
       }

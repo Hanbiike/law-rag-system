@@ -1,6 +1,13 @@
-# ChatGPT Lite
+# Law RAG Frontend
 
 English | [简体中文](./README.zh-CN.md)
+
+This directory contains the Next.js 16 web frontend used by the Law RAG System.
+It is based on ChatGPT Lite, but is integrated with the Law RAG FastAPI backend
+instead of calling OpenAI or Azure OpenAI directly from the frontend.
+
+For full project setup and the recommended combined startup flow, see
+[../README.md](../README.md) or [../README.ru.md](../README.ru.md).
 
 ## Demo
 
@@ -11,18 +18,20 @@ Try the [ChatGPT Lite Demo Site](https://gptlite.vercel.app).
 
 ## Features
 
-ChatGPT Lite is a lightweight ChatGPT web application built with Next.js 16 and the [OpenAI Chat API](https://platform.openai.com/docs/api-reference/chat). It supports both OpenAI and Azure OpenAI accounts.
+This frontend is a Law RAG web client built with Next.js 16. It talks to the
+Law RAG FastAPI backend and provides a browser chat interface for legal search,
+streaming answers, and document analysis.
 
 **Core Features:**
 
 - **Real-time Streaming Responses** - Instant token-by-token output via Edge Runtime and Server-Sent Events
 - **Rich Markdown Rendering** - Full markdown support with syntax highlighting and KaTeX math equations
-- **Persona System** - Create and switch between custom AI personalities with different system prompts
+- **Law RAG Modes** - Switch between `base`, `pro`, and `search` modes from the UI
 - **Persistent Chat History** - All conversations saved locally with no database required
-- **Dual Provider Support** - Works with both OpenAI and Azure OpenAI APIs
+- **Law RAG Backend Integration** - Uses the backend API via `LAW_RAG_API_URL`
 - **File Attachments** - Upload images, PDFs, spreadsheets (XLSX/CSV), and text files directly in chat
 - **Voice Input** - Dictate messages using Web Speech API with continuous recognition
-- **Web Search Integration** - Azure and OpenAI models can search the web when needed, with source citations
+- **Document/Image Analysis** - Send PDF URLs and screenshots to the backend for legal analysis
 
 **User Experience:**
 
@@ -42,68 +51,68 @@ If you’re looking for a more beginner-friendly ChatGPT UI codebase, check out 
 
 ## Prerequisites
 
-You need an OpenAI or Azure OpenAI account.
+- Node.js 20+
+- npm 10+
+- A running Law RAG backend (`run_api.py` or `run_service.py`)
 
 ## Deployment
 
-Refer to the [Environment Variables](#environment-variables) section below for required configurations.
+Refer to the [Environment Variables](#environment-variables) section below for the required configuration.
 
-### Deploy to Vercel
+### Recommended local production run
 
-Deploy instantly by clicking the button below:
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fblrchen%2Fchatgpt-lite&project-name=chatgpt-lite&framework=nextjs&repository-name=chatgpt-lite)
-
-### Deploy with Docker
-
-For OpenAI account users:
+From the repository root:
 
 ```bash
-docker run -d -p 3000:3000 \
-   -e OPENAI_API_KEY="<YOUR_OPENAI_API_KEY>" \
-   blrchen/chatgpt-lite
+python run_service.py --mode prod
 ```
 
-For Azure OpenAI account users:
+This builds the frontend, prepares the Next.js standalone output, and starts
+the production server together with the backend.
+
+### Frontend-only production run
+
+If you need to run the frontend separately from this directory:
 
 ```bash
-docker run -d -p 3000:3000 \
-   -e AZURE_OPENAI_RESOURCE_NAME="<YOUR_AZURE_RESOURCE_NAME>" \
-   -e AZURE_OPENAI_API_KEY="<YOUR_AZURE_OPENAI_API_KEY>" \
-   -e AZURE_OPENAI_DEPLOYMENT="<YOUR_AZURE_OPENAI_DEPLOYMENT_NAME>" \
-   blrchen/chatgpt-lite
+npm install
+npm run build
+PORT=3000 HOSTNAME=0.0.0.0 LAW_RAG_API_URL=http://127.0.0.1:8000 node .next/standalone/server.js
 ```
+
+If you launch the standalone server manually outside `run_service.py`, make
+sure `public/` and `.next/static/` are available next to `.next/standalone/server.js`.
 
 ## Development
 
 ### Running Locally
 
-1. Install Node.js 20.
-2. Clone this repository.
-3. Install dependencies using `npm install`.
-4. Copy `.env.example` to `.env.local` and update environment variables.
-5. Start the application with `npm run dev`.
-6. Open `http://localhost:3000` in your browser.
+Recommended: start the whole project from the repository root:
+
+```bash
+python run_service.py
+```
+
+Frontend-only development from this directory:
+
+1. Install dependencies using `npm install`.
+2. Ensure the backend is running on `http://127.0.0.1:8000` or set `LAW_RAG_API_URL`.
+3. Start the application with `npm run dev -- --webpack`.
+4. Open `http://localhost:3000` in your browser.
 
 ## Environment Variables
 
-The following environment variables are required:
+The frontend uses the following environment variables:
 
-For OpenAI account:
+| Name | Description | Default Value |
+| ---- | ----------- | ------------- |
+| `LAW_RAG_API_URL` | Base URL of the Law RAG FastAPI backend used by server routes and SSR calls. | `http://localhost:8000` |
+| `NEXT_PUBLIC_DEFAULT_THEME` | Optional default UI theme preset. | empty |
+| `PORT` | Port used by the standalone production server. | `3000` |
+| `HOSTNAME` | Bind host used by the standalone production server. | `0.0.0.0` |
 
-| Name                | Description                                                                                      | Default Value            |
-| ------------------- | ------------------------------------------------------------------------------------------------ | ------------------------ |
-| OPENAI_API_BASE_URL | (Optional) Use this if you plan to use a reverse proxy for `api.openai.com`.                     | `https://api.openai.com` |
-| OPENAI_API_KEY      | Secret key obtained from the [OpenAI API website](https://platform.openai.com/account/api-keys). |                          |
-| OPENAI_MODEL        | (Optional) GPT model to use                                                                      | `gpt-4o-mini`          |
-
-For Azure OpenAI account:
-
-| Name                       | Description                                    |
-| -------------------------- | ---------------------------------------------- |
-| AZURE_OPENAI_RESOURCE_NAME | Azure resource name (e.g., "my-openai-resource"). |
-| AZURE_OPENAI_API_KEY       | API Key.                                       |
-| AZURE_OPENAI_DEPLOYMENT    | Model deployment name (not the model name). |
+In the repository root, these values are typically configured through
+[../.env.example](../.env.example) and started via `run_service.py`.
 
 ## Acknowledgments
 

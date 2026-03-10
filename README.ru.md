@@ -12,9 +12,11 @@
   - **Базовый** (1 запрос) — быстрый поиск + LLM ответ
   - **Продвинутый** (2 запроса) — расширенный анализ с уточняющими вопросами
   - **Поиск** (1 запрос) — только релевантные статьи без LLM
-- **� REST API (FastAPI)**: все режимы доступны по HTTP со Swagger UI
+- **🌐 Веб-фронтенд (Next.js 16)** со стримингом ответов, анализом файлов, темами и голосовым режимом
+- **🧩 REST API (FastAPI)**: все режимы доступны по HTTP со Swagger UI
+- **🚀 Единый запуск**: `run_service.py` поднимает backend + frontend и в dev, и в prod
 - **💬 История чата**: поддержка `previous_response_id` для многоэтапных диалогов
-- **�🌐 Поддержка двух языков**: русский и кыргызский
+- **🌐 Поддержка двух языков**: русский и кыргызский
 - **📄 Анализ документов** с извлечением структурированных данных:
   - PDF файлы через URL (без base64)
   - Изображения/скриншоты документов
@@ -53,18 +55,30 @@ law-rag-system/
 ├── api/                          # FastAPI-приложение
 │   ├── __init__.py
 │   └── app.py                   # Эндпоинты: /v1/query, /v1/query/doc, /v1/query/image
+├── frontend/                     # Next.js веб-фронтенд
+│   ├── src/app/                 # App Router страницы и API routes
+│   ├── src/components/          # Chat UI, markdown, темы, voice chat
+│   └── package.json             # Зависимости и скрипты фронтенда
 ├── main.py                       # CLI точка входа
 ├── run_bot.py                    # Запуск Telegram-бота
 ├── run_api.py                    # Запуск FastAPI-сервера
+├── run_service.py                # Единый запуск backend + frontend
 ├── law_rag_db.json              # База законов (RU)
 ├── law_rag_db_kg.json           # База законов (KG)
+├── .env.example                  # Полный шаблон переменных окружения
 ├── requirements.txt              # Зависимости
 └── .env                          # Переменные окружения
 ```
 
 ## 🚀 Быстрый старт
 
-### 1. Клонирование и настройка
+### 1. Клонирование и установка зависимостей
+
+Требования:
+
+- Python 3.10+
+- Node.js 20+
+- npm 10+
 
 ```bash
 git clone https://github.com/Hanbiike/law-rag-system.git
@@ -72,12 +86,29 @@ cd law-rag-system
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
+cd frontend
+npm install
+cd ..
 ```
 
-### 2. Настройка `.env`
+Если нужен только backend или Telegram-бот, установку фронтенда можно пропустить.
+
+### 2. Создание `.env` из `.env.example`
+
+```bash
+cp .env.example .env
+```
+
+В репозитории теперь есть полный шаблон [.env.example](.env.example). Основные переменные:
 
 ```env
-# Azure OpenAI Nano (используется для всех запросов)
+# Azure OpenAI основной deployment
+AZURE_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_KEY=your_primary_api_key
+AZURE_DEPLOYMENT=your_primary_deployment
+AZURE_API_VERSION=2025-03-01-preview
+
+# Azure OpenAI Nano (роутинг / расширение запросов)
 AZURE_ENDPOINT_NANO=https://your-endpoint.openai.azure.com/
 AZURE_OPENAI_API_KEY_NANO=your_api_key
 AZURE_DEPLOYMENT_NANO=your_deployment_name
@@ -91,7 +122,15 @@ DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=root
 DB_NAME=law_rag_users
-DB_PORT=8889
+DB_PORT=3306
+
+# Локальные серверы
+API_HOST=0.0.0.0
+API_PORT=8000
+API_WORKERS=1
+FRONTEND_PORT=3000
+LAW_RAG_API_URL=http://127.0.0.1:8000
+NEXT_PUBLIC_DEFAULT_THEME=
 ```
 
 ### 3. Настройка MySQL
@@ -153,12 +192,32 @@ DB_PORT=3306
 
 ### 4. Запуск
 
+**Рекомендуемый вариант: backend + frontend вместе**
+```bash
+python run_service.py
+
+# Frontend:  http://localhost:3000
+# Backend:   http://localhost:8000/docs
+
+# Production режим (сборка фронтенда и запуск standalone-сервера)
+python run_service.py --mode prod
+
+# Только frontend или только backend
+python run_service.py --no-backend
+python run_service.py --no-frontend
+
+# Кастомные порты
+python run_service.py --frontend-port 3001 --api-port 8080
+```
+
+В dev-режиме фронтенд запускается через `next dev --webpack`. В prod-режиме `run_service.py` собирает Next.js-приложение, запускает standalone-сервер и автоматически подготавливает нужные статические ассеты.
+
 **Telegram-бот:**
 ```bash
 python run_bot.py
 ```
 
-**FastAPI-сервер:**
+**Только FastAPI-сервер:**
 ```bash
 python run_api.py
 # Swagger UI: http://localhost:8000/docs
@@ -539,6 +598,9 @@ uvicorn[standard]>=0.29.0  # ASGI-сервер
 | `CUDA out of memory` | Модель автоматически переключится на CPU |
 | Низкое качество | Увеличьте `top_k`, используйте режим `pro` |
 | Режим не сохраняется | Проверьте, что БД поддерживает `'search'` в `response_type` |
+| `EADDRINUSE` при запуске | Смените порт через `--frontend-port` / `--api-port` или остановите конфликтующий процесс |
+| Фронтенд в dev работает, а в prod «разваливается» | Запускайте через `python run_service.py --mode prod`; скрипт сам подготавливает статические ассеты для Next.js standalone |
+| `Can't resolve 'tailwindcss'` в dev-режиме фронтенда | Запускайте проект через `python run_service.py` или стартуйте фронтенд как `next dev --webpack` |
 
 ## 📊 Производительность
 

@@ -92,10 +92,10 @@
 }
 
 /* Fix Prism markdown table tokens that incorrectly use display: table */
-:global(span.token.table),
-:global(span.token.table-header-row),
-:global(span.token.table-line),
-:global(span.token.table-data-rows) {
+.markdown :global(span.token.table),
+.markdown :global(span.token.table-header-row),
+.markdown :global(span.token.table-line),
+.markdown :global(span.token.table-data-rows) {
   display: inline !important;
 }
 
